@@ -1,7 +1,7 @@
 export interface JwtUser {
   id: number;
   name: string;
-  email: string;
+  email?: string;
 }
 
 export interface TeamRow {
@@ -10,6 +10,7 @@ export interface TeamRow {
   email: string;
   password: string;
   score: number;
+  member_count: number;
   is_admin: number;
   created_at: string;
 }

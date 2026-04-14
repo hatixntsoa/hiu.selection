@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import sqlite3 from 'sqlite3';
 import { Server } from 'socket.io';
 import { getDatabase } from '../models/database';
+import { getCtfTimerState } from '../models/timer';
 import { ChallengeRow } from '../types';
 
 type SubmissionRow = {
@@ -19,7 +20,7 @@ type FlagSubmissionBody = {
   flag?: string;
 };
 
-export function submitFlag(req: Request, res: Response, io?: Server): Response | void {
+export async function submitFlag(req: Request, res: Response, io?: Server): Promise<Response | void> {
   const { challengeId, flag } = req.body as FlagSubmissionBody;
   const teamId = req.user?.id;
 
@@ -29,6 +30,15 @@ export function submitFlag(req: Request, res: Response, io?: Server): Response |
 
   if (!challengeId || !flag) {
     return res.status(400).json({ error: 'Challenge ID and flag are required' });
+  }
+
+  try {
+    const timer = await getCtfTimerState();
+    if (!timer.canSubmit) {
+      return res.status(403).json({ error: 'Flag submissions are currently closed.' });
+    }
+  } catch {
+    return res.status(500).json({ error: 'Database error' });
   }
 
   const db = getDatabase();

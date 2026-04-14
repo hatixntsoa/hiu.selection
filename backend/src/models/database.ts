@@ -34,7 +34,27 @@ function initializeDatabase(): void {
         email TEXT UNIQUE NOT NULL,
         password TEXT NOT NULL,
         score INTEGER DEFAULT 0,
+        member_count INTEGER DEFAULT 1,
         is_admin BOOLEAN DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    db!.all<{ name: string }>('PRAGMA table_info(teams)', [], (pragmaErr, columns) => {
+      if (pragmaErr) {
+        console.error('Error checking teams schema:', pragmaErr);
+        return;
+      }
+      const hasMemberCount = columns.some((column) => column.name === 'member_count');
+      if (!hasMemberCount) {
+        db!.run('ALTER TABLE teams ADD COLUMN member_count INTEGER DEFAULT 1');
+      }
+    });
+
+    db!.run(`
+      CREATE TABLE IF NOT EXISTS categories (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE COLLATE NOCASE NOT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -64,6 +84,22 @@ function initializeDatabase(): void {
       )
     `);
 
+    db!.run(`
+      CREATE TABLE IF NOT EXISTS ctf_timer (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        is_active INTEGER NOT NULL DEFAULT 1,
+        is_infinite INTEGER NOT NULL DEFAULT 0,
+        duration_seconds INTEGER NOT NULL DEFAULT 7200,
+        started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    db!.run(
+      `INSERT OR IGNORE INTO ctf_timer (id, is_active, is_infinite, duration_seconds, started_at)
+       VALUES (1, 1, 0, 7200, CURRENT_TIMESTAMP)`
+    );
+
     const adminPassword = bcrypt.hashSync(process.env.ADMIN_PASSWORD || 'admin123', 10);
     db!.run(
       `INSERT OR IGNORE INTO teams (name, email, password, is_admin, score) 
@@ -78,6 +114,11 @@ function initializeDatabase(): void {
       ['Binary Explorer', 'Analyze the binary and extract the flag', 'Reverse', 200, 'flag{binary_explorer_solved}'],
       ['Database Dive', 'Query the database to uncover the secret', 'SQL', 250, 'flag{sql_master_2024}']
     ];
+
+    const defaultCategories = ['Web', 'Crypto', 'Reverse', 'Misc', 'SQL', 'Forensics'];
+    defaultCategories.forEach((category) => {
+      db!.run('INSERT OR IGNORE INTO categories (name) VALUES (?)', [category]);
+    });
 
     sampleChallenges.forEach(([title, desc, category, points, flag]) => {
       db!.run(

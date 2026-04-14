@@ -5,16 +5,18 @@ import sqlite3 from 'sqlite3';
 import { getDatabase } from '../models/database';
 import { TeamRow } from '../types';
 
+const MAX_TEAM_MEMBERS = 6;
+
 function getJwtOptions(): SignOptions {
   const expiresIn = process.env.JWT_EXPIRES_IN || '24h';
   return { expiresIn: expiresIn as SignOptions['expiresIn'] };
 }
 
 export function register(req: Request, res: Response): Response | void {
-  const { name, email, password } = req.body as { name?: string; email?: string; password?: string };
+  const { name, password } = req.body as { name?: string; password?: string };
 
-  if (!name || !email || !password) {
-    return res.status(400).json({ error: 'Name, email, and password are required' });
+  if (!name || !password) {
+    return res.status(400).json({ error: 'Username and password are required' });
   }
 
   if (password.length < 6) {
@@ -22,44 +24,84 @@ export function register(req: Request, res: Response): Response | void {
   }
 
   const db = getDatabase();
-  const hashedPassword = bcrypt.hashSync(password, 10);
+  const trimmedName = name.trim();
+  const syntheticEmail = `${trimmedName.toLowerCase().replace(/[^a-z0-9]+/g, '_')}@ctf.local`;
 
-  db.run(
-    'INSERT INTO teams (name, email, password) VALUES (?, ?, ?)',
-    [name, email, hashedPassword],
-    function (this: sqlite3.RunResult, err: Error | null) {
-      if (err) {
-        if (err.message.includes('UNIQUE constraint')) {
-          return res.status(400).json({ error: 'Team name or email already exists' });
-        }
-        return res.status(500).json({ error: 'Registration failed' });
+  db.get<TeamRow>('SELECT * FROM teams WHERE name = ?', [trimmedName], (lookupErr, existingTeam) => {
+    if (lookupErr) {
+      return res.status(500).json({ error: 'Database error' });
+    }
+
+    if (existingTeam) {
+      const isValid = bcrypt.compareSync(password, existingTeam.password);
+      if (!isValid) {
+        return res.status(401).json({ error: 'Invalid credentials' });
+      }
+      if (existingTeam.member_count >= MAX_TEAM_MEMBERS) {
+        return res.status(400).json({ error: 'Team has reached the maximum of 6 members' });
       }
 
-      const token = jwt.sign(
-        { id: this.lastID, name, email },
-        process.env.JWT_SECRET as string,
-        getJwtOptions()
-      );
-
-      res.status(201).json({
-        message: 'Registration successful',
-        token,
-        team: { id: this.lastID, name, email, score: 0 }
+      db.run('UPDATE teams SET member_count = member_count + 1 WHERE id = ?', [existingTeam.id], (incErr) => {
+        if (incErr) {
+          return res.status(500).json({ error: 'Registration failed' });
+        }
+        const token = jwt.sign(
+          { id: existingTeam.id, name: existingTeam.name },
+          process.env.JWT_SECRET as string,
+          getJwtOptions()
+        );
+        return res.status(201).json({
+          message: 'Registration successful',
+          token,
+          team: {
+            id: existingTeam.id,
+            name: existingTeam.name,
+            score: existingTeam.score,
+            isAdmin: existingTeam.is_admin === 1
+          }
+        });
       });
+      return;
     }
-  );
+
+    const hashedPassword = bcrypt.hashSync(password, 10);
+    db.run(
+      'INSERT INTO teams (name, email, password, member_count) VALUES (?, ?, ?, 1)',
+      [trimmedName, syntheticEmail, hashedPassword],
+      function (this: sqlite3.RunResult, err: Error | null) {
+        if (err) {
+          if (err.message.includes('UNIQUE constraint')) {
+            return res.status(400).json({ error: 'Username already exists' });
+          }
+          return res.status(500).json({ error: 'Registration failed' });
+        }
+
+        const token = jwt.sign(
+          { id: this.lastID, name: trimmedName },
+          process.env.JWT_SECRET as string,
+          getJwtOptions()
+        );
+
+        return res.status(201).json({
+          message: 'Registration successful',
+          token,
+          team: { id: this.lastID, name: trimmedName, score: 0 }
+        });
+      }
+    );
+  });
 }
 
 export function login(req: Request, res: Response): Response | void {
-  const { email, password } = req.body as { email?: string; password?: string };
+  const { name, password } = req.body as { name?: string; password?: string };
 
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Email and password are required' });
+  if (!name || !password) {
+    return res.status(400).json({ error: 'Username and password are required' });
   }
 
   const db = getDatabase();
 
-  db.get<TeamRow>('SELECT * FROM teams WHERE email = ?', [email], (err, team) => {
+  db.get<TeamRow>('SELECT * FROM teams WHERE name = ?', [name], (err, team) => {
     if (err) {
       return res.status(500).json({ error: 'Database error' });
     }
@@ -75,7 +117,7 @@ export function login(req: Request, res: Response): Response | void {
     }
 
     const token = jwt.sign(
-      { id: team.id, name: team.name, email: team.email },
+      { id: team.id, name: team.name },
       process.env.JWT_SECRET as string,
       getJwtOptions()
     );
@@ -86,7 +128,6 @@ export function login(req: Request, res: Response): Response | void {
       team: {
         id: team.id,
         name: team.name,
-        email: team.email,
         score: team.score,
         isAdmin: team.is_admin === 1
       }
@@ -103,7 +144,7 @@ export function getMe(req: Request, res: Response): Response | void {
   }
 
   db.get<Omit<TeamRow, 'password'>>(
-    'SELECT id, name, email, score, is_admin, created_at FROM teams WHERE id = ?',
+    'SELECT id, name, email, score, member_count, is_admin, created_at FROM teams WHERE id = ?',
     [userId],
     (err, team) => {
       if (err) {

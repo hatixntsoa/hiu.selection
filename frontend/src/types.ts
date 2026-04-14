@@ -1,7 +1,7 @@
 export interface Team {
   id: number;
   name: string;
-  email: string;
+  email?: string;
   score: number;
   isAdmin?: boolean;
   created_at?: string;
@@ -9,11 +9,18 @@ export interface Team {
 
 export interface Challenge {
   id: number;
+  challenge_code?: string;
   title: string;
   description: string;
   category: string;
   points: number;
   flag?: string;
+  created_at?: string;
+}
+
+export interface ChallengeCategory {
+  id: number;
+  name: string;
   created_at?: string;
 }
 
@@ -43,4 +50,15 @@ export interface ScoreboardTeam {
   score: number;
   created_at: string;
   rank: number;
+}
+
+export interface CtfTimerState {
+  isActive: boolean;
+  isInfinite: boolean;
+  durationSeconds: number;
+  startedAt: string | null;
+  endsAt: string | null;
+  timeLeftSeconds: number | null;
+  isExpired: boolean;
+  canSubmit: boolean;
 }

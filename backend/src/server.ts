@@ -63,7 +63,7 @@ const HOST = process.env.HOST || '0.0.0.0';
 server.listen(PORT, HOST, () => {
   console.log(`CTF Platform backend running on http://${HOST}:${PORT}`);
   console.log('Database: ctf.db');
-  console.log(`Admin credentials: admin@ctf.local / ${process.env.ADMIN_PASSWORD || 'admin123'}`);
+  console.log(`Admin credentials: admin / ${process.env.ADMIN_PASSWORD || 'admin123'}`);
 });
 
 process.on('SIGINT', () => {

@@ -1,5 +1,6 @@
 import { Badge, Table } from 'react-bootstrap';
 import { ScoreboardTeam } from '../../types';
+import { usePreferences } from '../../context/PreferencesContext';
 
 function Scoreboard({
   scoreboard,
@@ -8,8 +9,10 @@ function Scoreboard({
   scoreboard: ScoreboardTeam[];
   currentUserId?: number;
 }): JSX.Element {
+  const { t } = usePreferences();
+
   if (scoreboard.length === 0) {
-    return <p className="text-secondary text-center mb-0">No teams yet</p>;
+    return <p className="text-secondary text-center mb-0">{t('scoreboardNoTeams')}</p>;
   }
 
   return (
@@ -18,8 +21,8 @@ function Scoreboard({
         <thead>
           <tr>
             <th>#</th>
-            <th>Team</th>
-            <th className="text-end">Points</th>
+            <th>{t('scoreboardTeam')}</th>
+            <th className="text-end">{t('scoreboardPoints')}</th>
           </tr>
         </thead>
         <tbody>
@@ -35,7 +38,7 @@ function Scoreboard({
                 {team.name}
                 {team.id === currentUserId && (
                   <Badge bg="primary" className="ms-2">
-                    You
+                    {t('scoreboardYou')}
                   </Badge>
                 )}
               </td>

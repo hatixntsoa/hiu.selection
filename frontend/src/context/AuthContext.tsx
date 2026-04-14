@@ -5,8 +5,8 @@ import { Team } from '../types';
 type AuthContextValue = {
   user: Team | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<Team>;
-  register: (name: string, email: string, password: string) => Promise<Team>;
+  login: (name: string, password: string) => Promise<Team>;
+  register: (name: string, password: string) => Promise<Team>;
   logout: () => void;
   updateUser: (updates: Partial<Team>) => void;
 };
@@ -27,8 +27,8 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
     setLoading(false);
   }, []);
 
-  const login = async (email: string, password: string): Promise<Team> => {
-    const response = await api.post('/auth/login', { email, password });
+  const login = async (name: string, password: string): Promise<Team> => {
+    const response = await api.post('/auth/login', { name, password });
     const { token, team } = response.data as { token: string; team: Team };
 
     localStorage.setItem('token', token);
@@ -38,8 +38,8 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
     return team;
   };
 
-  const register = async (name: string, email: string, password: string): Promise<Team> => {
-    const response = await api.post('/auth/register', { name, email, password });
+  const register = async (name: string, password: string): Promise<Team> => {
+    const response = await api.post('/auth/register', { name, password });
     const { token, team } = response.data as { token: string; team: Team };
 
     localStorage.setItem('token', token);

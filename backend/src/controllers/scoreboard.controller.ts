@@ -1,5 +1,12 @@
 import { Request, Response } from 'express';
 import { getDatabase } from '../models/database';
+import {
+  addTimerSeconds,
+  getCtfTimerState,
+  restartFiniteTimer,
+  setFiniteDuration,
+  setInfiniteTimer
+} from '../models/timer';
 
 type ScoreboardTeam = {
   id: number;
@@ -84,4 +91,69 @@ export function getStats(_req: Request, res: Response): void {
       });
     });
   });
+}
+
+type TimerRequestBody = {
+  durationSeconds?: number;
+  seconds?: number;
+};
+
+export async function getTimer(_req: Request, res: Response): Promise<Response> {
+  try {
+    const timer = await getCtfTimerState();
+    return res.json({ timer });
+  } catch {
+    return res.status(500).json({ error: 'Database error' });
+  }
+}
+
+export async function updateTimerDuration(req: Request, res: Response): Promise<Response> {
+  const { durationSeconds } = req.body as TimerRequestBody;
+  if (typeof durationSeconds !== 'number' || !Number.isFinite(durationSeconds)) {
+    return res.status(400).json({ error: 'Duration in seconds is required' });
+  }
+
+  try {
+    const timer = await setFiniteDuration(durationSeconds);
+    return res.json({ message: 'CTF timer duration updated', timer });
+  } catch {
+    return res.status(500).json({ error: 'Failed to update timer duration' });
+  }
+}
+
+export async function restartTimer(req: Request, res: Response): Promise<Response> {
+  const { durationSeconds } = req.body as TimerRequestBody;
+  if (typeof durationSeconds !== 'undefined' && (typeof durationSeconds !== 'number' || !Number.isFinite(durationSeconds))) {
+    return res.status(400).json({ error: 'Duration must be a valid number of seconds' });
+  }
+
+  try {
+    const timer = await restartFiniteTimer(durationSeconds);
+    return res.json({ message: 'CTF timer restarted', timer });
+  } catch {
+    return res.status(500).json({ error: 'Failed to restart timer' });
+  }
+}
+
+export async function addTimeToTimer(req: Request, res: Response): Promise<Response> {
+  const { seconds } = req.body as TimerRequestBody;
+  if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds <= 0) {
+    return res.status(400).json({ error: 'Positive seconds value is required' });
+  }
+
+  try {
+    const timer = await addTimerSeconds(seconds);
+    return res.json({ message: 'Time added to CTF timer', timer });
+  } catch {
+    return res.status(500).json({ error: 'Failed to add time to timer' });
+  }
+}
+
+export async function makeTimerInfinite(_req: Request, res: Response): Promise<Response> {
+  try {
+    const timer = await setInfiniteTimer();
+    return res.json({ message: 'CTF timer set to infinite mode', timer });
+  } catch {
+    return res.status(500).json({ error: 'Failed to set timer to infinite mode' });
+  }
 }
