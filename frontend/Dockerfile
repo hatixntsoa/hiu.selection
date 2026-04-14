@@ -1,7 +1,6 @@
 FROM node:20-bookworm-slim AS build
 
 WORKDIR /app
-ENV NODE_ENV=production
 
 ARG VITE_API_URL=http://localhost:3001/api
 ENV VITE_API_URL=$VITE_API_URL
