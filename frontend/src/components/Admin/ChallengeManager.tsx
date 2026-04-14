@@ -1,12 +1,21 @@
-import React, { useState, useEffect } from 'react';
-import { Table, Button, Modal, Form, Alert, Badge } from 'react-bootstrap';
+import { ChangeEvent, FormEvent, useEffect, useState } from 'react';
+import { Alert, Badge, Button, Form, Modal, Table } from 'react-bootstrap';
 import api from '../../services/api';
+import { Challenge } from '../../types';
 
-function ChallengeManager({ onChallengeChange }) {
-  const [challenges, setChallenges] = useState([]);
+type ChallengeForm = {
+  title: string;
+  description: string;
+  category: string;
+  points: string;
+  flag: string;
+};
+
+function ChallengeManager({ onChallengeChange }: { onChallengeChange?: () => void }): JSX.Element {
+  const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [showModal, setShowModal] = useState(false);
-  const [editingChallenge, setEditingChallenge] = useState(null);
-  const [formData, setFormData] = useState({
+  const [editingChallenge, setEditingChallenge] = useState<Challenge | null>(null);
+  const [formData, setFormData] = useState<ChallengeForm>({
     title: '',
     description: '',
     category: '',
@@ -20,24 +29,24 @@ function ChallengeManager({ onChallengeChange }) {
     fetchChallenges();
   }, []);
 
-  const fetchChallenges = async () => {
+  const fetchChallenges = async (): Promise<void> => {
     try {
       const response = await api.get('/challenges?includeFlag=true');
-      setChallenges(response.data.challenges);
+      setChallenges(response.data.challenges as Challenge[]);
     } catch (err) {
       console.error('Error fetching challenges:', err);
     }
   };
 
-  const handleShowModal = (challenge = null) => {
+  const handleShowModal = (challenge: Challenge | null = null): void => {
     if (challenge) {
       setEditingChallenge(challenge);
       setFormData({
         title: challenge.title,
         description: challenge.description,
         category: challenge.category,
-        points: challenge.points,
-        flag: challenge.flag
+        points: String(challenge.points),
+        flag: challenge.flag || ''
       });
     } else {
       setEditingChallenge(null);
@@ -48,57 +57,60 @@ function ChallengeManager({ onChallengeChange }) {
     setSuccess('');
   };
 
-  const handleCloseModal = () => {
+  const handleCloseModal = (): void => {
     setShowModal(false);
     setEditingChallenge(null);
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
     setError('');
     setSuccess('');
 
     try {
+      const payload = { ...formData, points: Number(formData.points) };
       if (editingChallenge) {
-        await api.put(`/challenges/${editingChallenge.id}`, formData);
+        await api.put(`/challenges/${editingChallenge.id}`, payload);
         setSuccess('Challenge updated successfully');
       } else {
-        await api.post('/challenges', formData);
+        await api.post('/challenges', payload);
         setSuccess('Challenge created successfully');
       }
       handleCloseModal();
-      fetchChallenges();
+      await fetchChallenges();
       onChallengeChange?.();
-    } catch (err) {
+    } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to save challenge');
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!confirm('Are you sure you want to delete this challenge?')) return;
+  const handleDelete = async (id: number): Promise<void> => {
+    if (!window.confirm('Are you sure you want to delete this challenge?')) {
+      return;
+    }
 
     try {
       await api.delete(`/challenges/${id}`);
       setSuccess('Challenge deleted successfully');
-      fetchChallenges();
+      await fetchChallenges();
       onChallengeChange?.();
-    } catch (err) {
+    } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to delete challenge');
     }
   };
 
-  const handleChange = (e) => {
+  const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>): void => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const getCategoryColor = (category) => {
-    const colors = {
-      'Web': 'primary',
-      'Crypto': 'warning',
-      'Reverse': 'danger',
-      'Misc': 'info',
-      'SQL': 'success',
-      'Forensics': 'secondary'
+  const getCategoryColor = (category: string): string => {
+    const colors: Record<string, string> = {
+      Web: 'primary',
+      Crypto: 'warning',
+      Reverse: 'danger',
+      Misc: 'info',
+      SQL: 'success',
+      Forensics: 'secondary'
     };
     return colors[category] || 'secondary';
   };
@@ -106,7 +118,7 @@ function ChallengeManager({ onChallengeChange }) {
   return (
     <div>
       <div className="d-flex justify-content-between align-items-center mb-3">
-        <h5 className="mb-0">Manage Challenges</h5>
+        <h5 className="mb-0 section-title">Manage Challenges</h5>
         <Button variant="primary" onClick={() => handleShowModal()}>
           + Add Challenge
         </Button>
@@ -115,7 +127,7 @@ function ChallengeManager({ onChallengeChange }) {
       {error && <Alert variant="danger">{error}</Alert>}
       {success && <Alert variant="success">{success}</Alert>}
 
-      <Table striped bordered hover responsive>
+      <Table striped bordered hover responsive className="warm-table">
         <thead>
           <tr>
             <th>ID</th>
@@ -132,12 +144,12 @@ function ChallengeManager({ onChallengeChange }) {
               <td>{challenge.id}</td>
               <td>{challenge.title}</td>
               <td>
-                <Badge bg={getCategoryColor(challenge.category)}>
-                  {challenge.category}
-                </Badge>
+                <Badge bg={getCategoryColor(challenge.category)}>{challenge.category}</Badge>
               </td>
               <td>{challenge.points}</td>
-              <td><code>{challenge.flag}</code></td>
+              <td>
+                <code>{challenge.flag}</code>
+              </td>
               <td>
                 <Button
                   variant="warning"
@@ -147,11 +159,7 @@ function ChallengeManager({ onChallengeChange }) {
                 >
                   Edit
                 </Button>
-                <Button
-                  variant="danger"
-                  size="sm"
-                  onClick={() => handleDelete(challenge.id)}
-                >
+                <Button variant="danger" size="sm" onClick={() => handleDelete(challenge.id)}>
                   Delete
                 </Button>
               </td>
@@ -163,30 +171,16 @@ function ChallengeManager({ onChallengeChange }) {
       <Modal show={showModal} onHide={handleCloseModal}>
         <Form onSubmit={handleSubmit}>
           <Modal.Header closeButton>
-            <Modal.Title>
-              {editingChallenge ? 'Edit Challenge' : 'Add Challenge'}
-            </Modal.Title>
+            <Modal.Title>{editingChallenge ? 'Edit Challenge' : 'Add Challenge'}</Modal.Title>
           </Modal.Header>
           <Modal.Body>
             <Form.Group className="mb-3">
               <Form.Label>Title</Form.Label>
-              <Form.Control
-                type="text"
-                name="title"
-                value={formData.title}
-                onChange={handleChange}
-                required
-              />
+              <Form.Control type="text" name="title" value={formData.title} onChange={handleChange} required />
             </Form.Group>
             <Form.Group className="mb-3">
               <Form.Label>Description</Form.Label>
-              <Form.Control
-                as="textarea"
-                rows={3}
-                name="description"
-                value={formData.description}
-                onChange={handleChange}
-              />
+              <Form.Control as="textarea" rows={3} name="description" value={formData.description} onChange={handleChange} />
             </Form.Group>
             <Form.Group className="mb-3">
               <Form.Label>Category</Form.Label>
@@ -200,14 +194,7 @@ function ChallengeManager({ onChallengeChange }) {
             </Form.Group>
             <Form.Group className="mb-3">
               <Form.Label>Points</Form.Label>
-              <Form.Control
-                type="number"
-                name="points"
-                value={formData.points}
-                onChange={handleChange}
-                required
-                min="0"
-              />
+              <Form.Control type="number" name="points" value={formData.points} onChange={handleChange} required min="0" />
             </Form.Group>
             <Form.Group className="mb-3">
               <Form.Label>Flag</Form.Label>

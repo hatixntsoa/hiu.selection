@@ -1,14 +1,20 @@
-import React, { useState } from 'react';
-import { Container, Row, Col, Card, Form, Button, Alert, Tabs, Tab } from 'react-bootstrap';
+import { FormEvent, useState } from 'react';
+import { Alert, Button, Card, Col, Container, Form, Row, Tab, Tabs } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
-function LoginPage() {
+type FormData = {
+  name: string;
+  email: string;
+  password: string;
+};
+
+function LoginPage(): JSX.Element {
   const { login, register, user } = useAuth();
   const navigate = useNavigate();
-  
-  const [activeTab, setActiveTab] = useState('login');
-  const [formData, setFormData] = useState({
+
+  const [activeTab, setActiveTab] = useState<string>('login');
+  const [formData, setFormData] = useState<FormData>({
     name: '',
     email: '',
     password: ''
@@ -20,11 +26,7 @@ function LoginPage() {
     navigate('/dashboard');
   }
 
-  const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
-
-  const handleLogin = async (e) => {
+  const handleLogin = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
     setError('');
     setLoading(true);
@@ -32,14 +34,14 @@ function LoginPage() {
     try {
       await login(formData.email, formData.password);
       navigate('/dashboard');
-    } catch (err) {
+    } catch (err: any) {
       setError(err.response?.data?.error || 'Login failed');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleRegister = async (e) => {
+  const handleRegister = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
     setError('');
     setLoading(true);
@@ -47,7 +49,7 @@ function LoginPage() {
     try {
       await register(formData.name, formData.email, formData.password);
       navigate('/dashboard');
-    } catch (err) {
+    } catch (err: any) {
       setError(err.response?.data?.error || 'Registration failed');
     } finally {
       setLoading(false);
@@ -58,14 +60,14 @@ function LoginPage() {
     <Container>
       <Row className="justify-content-center">
         <Col md={6} lg={5}>
-          <Card>
+          <Card className="soft-card">
             <Card.Body>
-              <h3 className="text-center mb-4">Team Authentication</h3>
-              
+              <h3 className="text-center mb-4 section-title">Team Authentication</h3>
+
               <Tabs
                 activeKey={activeTab}
                 onSelect={(k) => {
-                  setActiveTab(k);
+                  setActiveTab(k || 'login');
                   setError('');
                 }}
                 className="mb-4"
@@ -80,7 +82,7 @@ function LoginPage() {
                         name="email"
                         placeholder="team@example.com"
                         value={formData.email}
-                        onChange={handleChange}
+                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                         required
                       />
                     </Form.Group>
@@ -91,7 +93,7 @@ function LoginPage() {
                         name="password"
                         placeholder="Password"
                         value={formData.password}
-                        onChange={handleChange}
+                        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                         required
                       />
                     </Form.Group>
@@ -110,7 +112,7 @@ function LoginPage() {
                         name="name"
                         placeholder="Team Awesome"
                         value={formData.name}
-                        onChange={handleChange}
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                         required
                       />
                     </Form.Group>
@@ -121,7 +123,7 @@ function LoginPage() {
                         name="email"
                         placeholder="team@example.com"
                         value={formData.email}
-                        onChange={handleChange}
+                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                         required
                       />
                     </Form.Group>
@@ -132,7 +134,7 @@ function LoginPage() {
                         name="password"
                         placeholder="Min 6 characters"
                         value={formData.password}
-                        onChange={handleChange}
+                        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                         required
                         minLength={6}
                       />

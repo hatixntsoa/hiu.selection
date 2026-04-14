@@ -1,20 +1,19 @@
-require('dotenv').config();
-const express = require('express');
-const http = require('http');
-const { Server } = require('socket.io');
-const cors = require('cors');
-const rateLimit = require('express-rate-limit');
+import 'dotenv/config';
+import express, { NextFunction, Request, Response } from 'express';
+import http from 'http';
+import { Server } from 'socket.io';
+import cors from 'cors';
+import rateLimit from 'express-rate-limit';
 
-const { getDatabase, closeDatabase } = require('./models/database');
-const authRoutes = require('./routes/auth.routes');
-const challengeRoutes = require('./routes/challenge.routes');
-const { router: flagRoutes, setIO } = require('./routes/flag.routes');
-const scoreboardRoutes = require('./routes/scoreboard.routes');
+import { closeDatabase } from './models/database';
+import authRoutes from './routes/auth.routes';
+import challengeRoutes from './routes/challenge.routes';
+import { router as flagRoutes, setIO } from './routes/flag.routes';
+import scoreboardRoutes from './routes/scoreboard.routes';
 
 const app = express();
 const server = http.createServer(app);
 
-// Socket.io setup
 const io = new Server(server, {
   cors: {
     origin: process.env.FRONTEND_URL || 'http://localhost:3000',
@@ -24,32 +23,27 @@ const io = new Server(server, {
 
 setIO(io);
 
-// Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Rate limiting
 const flagLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 30, // 30 submissions per minute
+  windowMs: 60 * 1000,
+  max: 30,
   message: { error: 'Too many flag submissions. Please slow down.' }
 });
 
 app.use('/api/flags/submit', flagLimiter);
 
-// Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/challenges', challengeRoutes);
 app.use('/api/flags', flagRoutes);
 app.use('/api/scoreboard', scoreboardRoutes);
 
-// Health check
-app.get('/api/health', (req, res) => {
+app.get('/api/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Socket.io connections
 io.on('connection', (socket) => {
   console.log('Client connected:', socket.id);
 
@@ -58,23 +52,20 @@ io.on('connection', (socket) => {
   });
 });
 
-// Error handling middleware
-app.use((err, req, res, next) => {
+app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   console.error(err.stack);
   res.status(500).json({ error: 'Something went wrong!' });
 });
 
-// Start server
-const PORT = process.env.PORT || 3001;
+const PORT = Number(process.env.PORT) || 3001;
 const HOST = process.env.HOST || '0.0.0.0';
 
 server.listen(PORT, HOST, () => {
   console.log(`CTF Platform backend running on http://${HOST}:${PORT}`);
-  console.log(`Database: ctf.db`);
+  console.log('Database: ctf.db');
   console.log(`Admin credentials: admin@ctf.local / ${process.env.ADMIN_PASSWORD || 'admin123'}`);
 });
 
-// Graceful shutdown
 process.on('SIGINT', () => {
   console.log('\nShutting down...');
   closeDatabase();
@@ -83,4 +74,4 @@ process.on('SIGINT', () => {
   });
 });
 
-module.exports = { app, server, io };
+export { app, server, io };

@@ -1,5 +1,4 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Navbar from './components/Navbar';
 import HomePage from './pages/HomePage';
@@ -7,7 +6,13 @@ import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import AdminPage from './pages/AdminPage';
 
-function ProtectedRoute({ children, adminOnly = false }) {
+function ProtectedRoute({
+  children,
+  adminOnly = false
+}: {
+  children: JSX.Element;
+  adminOnly?: boolean;
+}): JSX.Element {
   const { user, loading } = useAuth();
 
   if (loading) {
@@ -25,7 +30,7 @@ function ProtectedRoute({ children, adminOnly = false }) {
   return children;
 }
 
-function App() {
+function App(): JSX.Element {
   return (
     <Router>
       <AuthProvider>

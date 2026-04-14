@@ -1,14 +1,20 @@
-import React from 'react';
-import { Table, Badge } from 'react-bootstrap';
+import { Badge, Table } from 'react-bootstrap';
+import { ScoreboardTeam } from '../../types';
 
-function Scoreboard({ scoreboard, currentUserId }) {
+function Scoreboard({
+  scoreboard,
+  currentUserId
+}: {
+  scoreboard: ScoreboardTeam[];
+  currentUserId?: number;
+}): JSX.Element {
   if (scoreboard.length === 0) {
-    return <p className="text-secondary text-center">No teams yet</p>;
+    return <p className="text-secondary text-center mb-0">No teams yet</p>;
   }
 
   return (
     <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-      <Table striped bordered hover responsive size="sm">
+      <Table striped bordered hover responsive size="sm" className="warm-table">
         <thead>
           <tr>
             <th>#</th>
@@ -18,10 +24,7 @@ function Scoreboard({ scoreboard, currentUserId }) {
         </thead>
         <tbody>
           {scoreboard.map((team) => (
-            <tr
-              key={team.id}
-              className={team.id === currentUserId ? 'table-active' : ''}
-            >
+            <tr key={team.id} className={team.id === currentUserId ? 'table-active' : ''}>
               <td>
                 {team.rank === 1 && '🥇'}
                 {team.rank === 2 && '🥈'}
@@ -30,7 +33,11 @@ function Scoreboard({ scoreboard, currentUserId }) {
               </td>
               <td>
                 {team.name}
-                {team.id === currentUserId && <Badge bg="primary" className="ms-2">You</Badge>}
+                {team.id === currentUserId && (
+                  <Badge bg="primary" className="ms-2">
+                    You
+                  </Badge>
+                )}
               </td>
               <td className="text-end">
                 <strong>{team.score}</strong>

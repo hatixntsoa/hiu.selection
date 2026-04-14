@@ -1,14 +1,25 @@
-const { getDatabase } = require('../models/database');
+import { Request, Response } from 'express';
+import sqlite3 from 'sqlite3';
+import { getDatabase } from '../models/database';
+import { ChallengeRow } from '../types';
 
-function getAllChallenges(req, res) {
+type ChallengeInput = {
+  title?: string;
+  description?: string;
+  category?: string;
+  points?: number;
+  flag?: string;
+};
+
+export function getAllChallenges(req: Request, res: Response): Response | void {
   const db = getDatabase();
-  const excludeFlag = req.query.includeFlag === 'true';
+  const includeFlag = req.query.includeFlag === 'true';
 
-  const query = excludeFlag 
+  const query = includeFlag
     ? 'SELECT * FROM challenges ORDER BY points ASC'
     : 'SELECT id, title, description, category, points, created_at FROM challenges ORDER BY points ASC';
 
-  db.all(query, [], (err, challenges) => {
+  db.all<ChallengeRow>(query, [], (err, challenges) => {
     if (err) {
       return res.status(500).json({ error: 'Database error' });
     }
@@ -16,12 +27,13 @@ function getAllChallenges(req, res) {
   });
 }
 
-function getChallengeById(req, res) {
+export function getChallengeById(req: Request, res: Response): Response | void {
   const db = getDatabase();
   const { id } = req.params;
 
-  db.get('SELECT id, title, description, category, points, created_at FROM challenges WHERE id = ?', 
-    [id], 
+  db.get<ChallengeRow>(
+    'SELECT id, title, description, category, points, created_at FROM challenges WHERE id = ?',
+    [id],
     (err, challenge) => {
       if (err) {
         return res.status(500).json({ error: 'Database error' });
@@ -34,8 +46,8 @@ function getChallengeById(req, res) {
   );
 }
 
-function createChallenge(req, res) {
-  const { title, description, category, points, flag } = req.body;
+export function createChallenge(req: Request, res: Response): Response | void {
+  const { title, description, category, points, flag } = req.body as ChallengeInput;
 
   if (!title || !points || !flag) {
     return res.status(400).json({ error: 'Title, points, and flag are required' });
@@ -46,7 +58,7 @@ function createChallenge(req, res) {
   db.run(
     'INSERT INTO challenges (title, description, category, points, flag) VALUES (?, ?, ?, ?, ?)',
     [title, description || '', category || '', points, flag],
-    function(err) {
+    function (this: sqlite3.RunResult, err: Error | null) {
       if (err) {
         return res.status(500).json({ error: 'Failed to create challenge' });
       }
@@ -59,16 +71,15 @@ function createChallenge(req, res) {
   );
 }
 
-function updateChallenge(req, res) {
+export function updateChallenge(req: Request, res: Response): Response | void {
   const { id } = req.params;
-  const { title, description, category, points, flag } = req.body;
-
+  const { title, description, category, points, flag } = req.body as ChallengeInput;
   const db = getDatabase();
 
   db.run(
     'UPDATE challenges SET title = COALESCE(?, title), description = COALESCE(?, description), category = COALESCE(?, category), points = COALESCE(?, points), flag = COALESCE(?, flag) WHERE id = ?',
     [title, description, category, points, flag, id],
-    function(err) {
+    function (this: sqlite3.RunResult, err: Error | null) {
       if (err) {
         return res.status(500).json({ error: 'Failed to update challenge' });
       }
@@ -80,11 +91,11 @@ function updateChallenge(req, res) {
   );
 }
 
-function deleteChallenge(req, res) {
+export function deleteChallenge(req: Request, res: Response): Response | void {
   const { id } = req.params;
   const db = getDatabase();
 
-  db.run('DELETE FROM challenges WHERE id = ?', [id], function(err) {
+  db.run('DELETE FROM challenges WHERE id = ?', [id], function (this: sqlite3.RunResult, err: Error | null) {
     if (err) {
       return res.status(500).json({ error: 'Failed to delete challenge' });
     }
@@ -94,11 +105,3 @@ function deleteChallenge(req, res) {
     res.json({ message: 'Challenge deleted' });
   });
 }
-
-module.exports = { 
-  getAllChallenges, 
-  getChallengeById, 
-  createChallenge, 
-  updateChallenge, 
-  deleteChallenge 
-};

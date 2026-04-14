@@ -2,10 +2,11 @@
   "name": "ctf-platform-backend",
   "version": "1.0.0",
   "description": "CTF Platform Backend API",
-  "main": "src/server.js",
+  "main": "dist/server.js",
   "scripts": {
-    "start": "node src/server.js",
-    "dev": "nodemon src/server.js"
+    "start": "tsx src/server.ts",
+    "dev": "nodemon --watch src --ext ts --exec \"tsx src/server.ts\"",
+    "build": "tsc -p tsconfig.json"
   },
   "keywords": ["ctf", "capture-the-flag", "api"],
   "author": "",
@@ -21,6 +22,14 @@
     "express-rate-limit": "^7.1.5"
   },
   "devDependencies": {
-    "nodemon": "^3.0.2"
+    "@types/bcrypt": "^5.0.2",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/jsonwebtoken": "^9.0.7",
+    "@types/node": "^22.10.2",
+    "@types/sqlite3": "^3.1.11",
+    "nodemon": "^3.0.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
   }
 }
