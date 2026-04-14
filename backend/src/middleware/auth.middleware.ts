@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { JwtUser } from '../types';
+import { getDatabase } from '../models/database';
 
 export function authMiddleware(req: Request, res: Response, next: NextFunction): Response | void {
   const token = req.headers.authorization?.split(' ')[1];
@@ -11,8 +12,17 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as JwtUser;
-    req.user = decoded;
-    next();
+    const db = getDatabase();
+    db.get<{ id: number }>('SELECT id FROM teams WHERE id = ?', [decoded.id], (err, team) => {
+      if (err) {
+        return res.status(500).json({ error: 'Database error' });
+      }
+      if (!team) {
+        return res.status(401).json({ error: 'Invalid or expired token' });
+      }
+      req.user = decoded;
+      return next();
+    });
   } catch {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Card, Col, Container, Row, Table } from 'react-bootstrap';
+import { Alert, Button, Card, Col, Container, Modal, Row, Table } from 'react-bootstrap';
 import { useParams } from 'react-router-dom';
 import api from '../services/api';
 import ChallengeManager from '../components/Admin/ChallengeManager';
@@ -13,6 +13,9 @@ function AdminPage(): JSX.Element {
   const { section } = useParams<{ section?: string }>();
   const [teams, setTeams] = useState<ScoreboardTeam[]>([]);
   const [timer, setTimer] = useState<CtfTimerState | null>(null);
+  const [showDeleteTeamModal, setShowDeleteTeamModal] = useState(false);
+  const [deletingTeam, setDeletingTeam] = useState<ScoreboardTeam | null>(null);
+  const [deleteTeamError, setDeleteTeamError] = useState('');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const liveScoreboardRef = useRef<HTMLDivElement | null>(null);
   const { t, language } = usePreferences();
@@ -41,11 +44,36 @@ function AdminPage(): JSX.Element {
 
     const socket = connectSocket();
     socket.on('scoreboard_update', fetchData);
+    const interval = window.setInterval(() => {
+      void fetchData();
+    }, 2000);
 
     return () => {
       socket.off('scoreboard_update', fetchData);
+      window.clearInterval(interval);
     };
   }, []);
+
+  const openDeleteTeamModal = (team: ScoreboardTeam): void => {
+    setDeleteTeamError('');
+    setDeletingTeam(team);
+    setShowDeleteTeamModal(true);
+  };
+
+  const handleDeleteTeam = async (): Promise<void> => {
+    if (!deletingTeam) {
+      return;
+    }
+    try {
+      await api.delete(`/auth/admin/teams/${deletingTeam.id}`);
+      setShowDeleteTeamModal(false);
+      setDeletingTeam(null);
+      await fetchData();
+    } catch (err) {
+      const error = err as { response?: { data?: { error?: string } } };
+      setDeleteTeamError(error.response?.data?.error || t('adminTeamDeleteFailed'));
+    }
+  };
 
   useEffect(() => {
     const onChange = (): void => {
@@ -65,16 +93,6 @@ function AdminPage(): JSX.Element {
     }
     await liveScoreboardRef.current.requestFullscreen();
   };
-
-  useEffect(() => {
-    const interval = window.setInterval(() => {
-      api
-        .get('/scoreboard/timer')
-        .then((response) => setTimer(response.data.timer as CtfTimerState))
-        .catch(() => undefined);
-    }, 1000);
-    return () => window.clearInterval(interval);
-  }, []);
 
   return (
     <Container fluid>
@@ -129,6 +147,7 @@ function AdminPage(): JSX.Element {
                     <th>{t('adminTeamName')}</th>
                     <th>{t('adminScore')}</th>
                     <th>{t('adminRegistered')}</th>
+                    <th>{t('managerTableActions')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -140,6 +159,11 @@ function AdminPage(): JSX.Element {
                         <strong>{team.score}</strong>
                       </td>
                       <td>{team.created_at ? new Date(team.created_at).toLocaleDateString(language === 'fr' ? 'fr-FR' : 'en-US') : '-'}</td>
+                      <td>
+                        <Button variant="danger" size="sm" onClick={() => openDeleteTeamModal(team)}>
+                          {t('managerDelete')}
+                        </Button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -151,6 +175,42 @@ function AdminPage(): JSX.Element {
             <TimerManager timer={timer} onTimerChange={setTimer} />
           </div>
       )}
+
+      <Modal
+        show={showDeleteTeamModal}
+        onHide={() => {
+          setShowDeleteTeamModal(false);
+          setDeletingTeam(null);
+          setDeleteTeamError('');
+        }}
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>{t('managerDelete')}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p className="mb-0">{t('adminDeleteTeamConfirm', { team: deletingTeam?.name || '' })}</p>
+          {deleteTeamError && (
+            <Alert variant="danger" className="mt-3 mb-0">
+              {deleteTeamError}
+            </Alert>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setShowDeleteTeamModal(false);
+              setDeletingTeam(null);
+              setDeleteTeamError('');
+            }}
+          >
+            {t('managerCancel')}
+          </Button>
+          <Button variant="danger" onClick={() => void handleDeleteTeam()}>
+            {t('managerDelete')}
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </Container>
   );
 }

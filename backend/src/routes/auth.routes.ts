@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   addTeamMember,
+  deleteTeamByAdmin,
   deleteTeamMember,
   getMe,
   listTeamMembers,
@@ -9,6 +10,7 @@ import {
   updateTeam,
   updateTeamMember
 } from '../controllers/auth.controller';
+import { adminMiddleware } from '../middleware/admin.middleware';
 import { authMiddleware } from '../middleware/auth.middleware';
 
 const router = Router();
@@ -21,5 +23,6 @@ router.get('/team/members', authMiddleware, listTeamMembers);
 router.post('/team/members', authMiddleware, addTeamMember);
 router.put('/team/members/:memberId', authMiddleware, updateTeamMember);
 router.delete('/team/members/:memberId', authMiddleware, deleteTeamMember);
+router.delete('/admin/teams/:teamId', authMiddleware, adminMiddleware, deleteTeamByAdmin);
 
 export default router;

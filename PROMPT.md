@@ -21,7 +21,7 @@ Build a polished CTF web app with:
 - Node.js
 - Express
 - TypeScript
-- SQLite database (`backend/ctf.db`)
+- SQLite database (`backend/data/ctf.db`)
 - Socket.IO for real-time events
 - JWT auth
 - bcrypt for password hashing

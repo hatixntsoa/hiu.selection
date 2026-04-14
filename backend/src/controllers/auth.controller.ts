@@ -59,6 +59,9 @@ export function register(req: Request, res: Response): Response | void {
 
   const db = getDatabase();
   const trimmedName = name.trim();
+  if (trimmedName.toLowerCase() === 'admin') {
+    return res.status(400).json({ error: 'Username is reserved' });
+  }
   const syntheticEmail = toSyntheticEmail(trimmedName);
 
   db.get<TeamRow>('SELECT * FROM teams WHERE name = ? COLLATE NOCASE', [trimmedName], (lookupErr, existingTeam) => {
@@ -429,6 +432,65 @@ export function deleteTeamMember(req: Request, res: Response): Response | void {
         }
         emitRealtimeUpdates(req);
         return res.json({ message: 'Member deleted' });
+      });
+    });
+  });
+}
+
+export function deleteTeamByAdmin(req: Request, res: Response): Response | void {
+  const teamId = Number(req.params.teamId);
+  if (!Number.isInteger(teamId) || teamId <= 0) {
+    return res.status(400).json({ error: 'Team not found' });
+  }
+
+  const db = getDatabase();
+  db.get<TeamRow>('SELECT id, name, is_admin FROM teams WHERE id = ?', [teamId], (lookupErr, team) => {
+    if (lookupErr) {
+      return res.status(500).json({ error: 'Database error' });
+    }
+    if (!team) {
+      return res.status(404).json({ error: 'Team not found' });
+    }
+    if (team.is_admin === 1) {
+      return res.status(400).json({ error: 'Admin team cannot be deleted' });
+    }
+
+    db.run('BEGIN IMMEDIATE TRANSACTION', (beginErr) => {
+      if (beginErr) {
+        return res.status(500).json({ error: 'Database error' });
+      }
+
+      db.run('DELETE FROM submissions WHERE team_id = ?', [teamId], (deleteSubmissionsErr) => {
+        if (deleteSubmissionsErr) {
+          db.run('ROLLBACK');
+          return res.status(500).json({ error: 'Database error' });
+        }
+
+        db.run('DELETE FROM team_members WHERE team_id = ?', [teamId], (deleteMembersErr) => {
+          if (deleteMembersErr) {
+            db.run('ROLLBACK');
+            return res.status(500).json({ error: 'Database error' });
+          }
+
+          db.run('DELETE FROM teams WHERE id = ?', [teamId], (deleteTeamErr) => {
+            if (deleteTeamErr) {
+              db.run('ROLLBACK');
+              return res.status(500).json({ error: 'Database error' });
+            }
+
+            db.run('COMMIT', (commitErr) => {
+              if (commitErr) {
+                db.run('ROLLBACK');
+                return res.status(500).json({ error: 'Database error' });
+              }
+
+              const io = req.app.get('io') as Server | undefined;
+              io?.to(`team:${teamId}`).emit('team_deleted', { teamId });
+              emitRealtimeUpdates(req);
+              return res.json({ message: 'Team deleted' });
+            });
+          });
+        });
       });
     });
   });

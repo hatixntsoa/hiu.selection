@@ -4,20 +4,47 @@ import http from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
+import jwt from 'jsonwebtoken';
 
-import { closeDatabase, getDatabase } from './models/database';
+import { closeDatabase, getDatabase, getDatabasePath } from './models/database';
+import { JwtUser } from './types';
 import authRoutes from './routes/auth.routes';
 import challengeRoutes from './routes/challenge.routes';
 import { router as flagRoutes, setIO } from './routes/flag.routes';
 import scoreboardRoutes from './routes/scoreboard.routes';
 
+if (!process.env.JWT_SECRET || !process.env.JWT_SECRET.trim()) {
+  process.env.JWT_SECRET = 'change-me-dev-secret';
+  console.warn('JWT_SECRET is not set. Falling back to an insecure development default.');
+}
+
 const app = express();
 const server = http.createServer(app);
+const frontendOrigins = process.env.FRONTEND_URL
+  ? process.env.FRONTEND_URL.split(',').map((origin) => origin.trim()).filter(Boolean)
+  : true;
 
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: frontendOrigins,
     methods: ['GET', 'POST']
+  }
+});
+
+io.use((socket, next) => {
+  const tokenFromAuth = typeof socket.handshake.auth?.token === 'string' ? socket.handshake.auth.token : '';
+  const token = tokenFromAuth.trim();
+  if (!token) {
+    next();
+    return;
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as JwtUser;
+    socket.data.user = decoded;
+    next();
+  } catch {
+    next();
   }
 });
 
@@ -46,6 +73,10 @@ app.get('/api/health', (_req: Request, res: Response) => {
 });
 
 io.on('connection', (socket) => {
+  const user = socket.data.user as JwtUser | undefined;
+  if (user?.id) {
+    socket.join(`team:${user.id}`);
+  }
   console.log('Client connected:', socket.id);
 
   socket.on('disconnect', () => {
@@ -65,7 +96,7 @@ getDatabase();
 
 server.listen(PORT, HOST, () => {
   console.log(`CTF Platform backend running on http://${HOST}:${PORT}`);
-  console.log('Database: ctf.db');
+  console.log(`Database: ${getDatabasePath()}`);
 });
 
 process.on('SIGINT', () => {

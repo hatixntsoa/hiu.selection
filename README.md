@@ -7,14 +7,14 @@ A full-stack CTF platform with real-time scoring, admin controls, timer-based co
 - **Auth route/UI:** `/auth` (with `/login` redirect compatibility)
 - **Credentials:** username + password only (no email in UI)
 - **Team member model:** up to **6 members** can join the same team using the same team name/password
-- **Admin account:** `admin` with a secure random password generated on first run and printed in backend logs (stored in DB for later startup log display)
+- **Admin account:** single `admin` account with a secure random 16-character password generated on first run, stored in DB, and printed on every backend startup
 - **Dashboard navigation:** top tabs (Ranking, Scoreboard, Live Activity, Challenges)
 - **Challenges UX:** click challenge card -> submit flag modal + confetti on correct flag
 - **Live updates:** scoreboard/activity via Socket.IO
 - **Themes:** system/light/dark with GitHub-style dark palette
 - **Settings:** theme, language (EN/FR), font family
 - **i18n:** UI text localized (EN/FR)
-- **Admin features:** challenge CRUD, category management, CTF timer controls, teams list, live scoreboard view (with fullscreen button)
+- **Admin features:** challenge CRUD, category management, CTF timer controls, teams list with team deletion, live scoreboard view (with fullscreen button)
 - **CTF timer controls (admin):** set duration, restart, add time, infinite mode
 - **Timer enforcement:** non-admin submissions locked when timer is over
 - **End state for teams:** when CTF ends, team users are redirected to an end page with team name, rank, and points
@@ -23,7 +23,7 @@ A full-stack CTF platform with real-time scoring, admin controls, timer-based co
 
 ### Backend
 - Node.js + Express + TypeScript
-- SQLite (`backend/ctf.db`)
+- SQLite (`backend/data/ctf.db`)
 - JWT auth
 - bcrypt password hashing
 - Socket.IO
@@ -124,7 +124,7 @@ services:
       - PORT=3001
       - HOST=0.0.0.0
       - JWT_SECRET=change-me
-      - FRONTEND_URL=http://localhost:3000
+      - FRONTEND_URL=
       - DB_PATH=/app/data/ctf.db
     volumes:
       - backend_data:/app/data
@@ -133,7 +133,7 @@ services:
     build:
       context: ./frontend
       args:
-        VITE_API_URL: http://localhost:3001/api
+        VITE_API_URL: /api
     ports:
       - "3000:80"
     depends_on:
@@ -152,7 +152,8 @@ docker compose up --build
 Then open:
 
 - Frontend: `http://localhost:3000`
-- Backend health: `http://localhost:3001/api/health`
+- Backend health (direct): `http://localhost:3001/api/health`
+- Backend health (via frontend proxy): `http://localhost:3000/api/health`
 - Admin credentials: check backend startup logs (`Admin credentials: admin / <generated-password>`)
 
 ## Main API routes

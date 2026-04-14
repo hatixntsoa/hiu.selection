@@ -111,7 +111,7 @@ ctf/
 │   │   ├── middleware/
 │   │   ├── routes/
 │   │   └── server.js
-│   └── ctf.db         # SQLite database (auto-created)
+│   └── data/ctf.db    # SQLite database (auto-created)
 ├── frontend/          # React + Vite UI
 │   ├── src/
 │   │   ├── components/
@@ -147,7 +147,7 @@ ctf/
 - Check Node.js version (v16+)
 
 **Database issues:**
-- Delete `backend/ctf.db` to reset
+- Delete `backend/data/ctf.db` to reset
 - Database auto-creates on first run
 
 ## 🎯 Next Steps

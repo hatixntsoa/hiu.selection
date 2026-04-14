@@ -34,6 +34,12 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
     }
 
     const socket = connectSocket();
+    const forceLogout = (): void => {
+      localStorage.removeItem('token');
+      localStorage.removeItem('team');
+      setUser(null);
+      window.location.href = '/auth';
+    };
     const refreshCurrentUser = (): void => {
       api
         .get('/auth/me')
@@ -42,12 +48,20 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
           setUser(freshTeam);
           localStorage.setItem('team', JSON.stringify(freshTeam));
         })
-        .catch(() => undefined);
+        .catch((error: { response?: { status?: number } }) => {
+          const status = error.response?.status;
+          if (status === 401 || status === 404) {
+            forceLogout();
+            return;
+          }
+        });
     };
 
     socket.on('scoreboard_update', refreshCurrentUser);
+    socket.on('team_deleted', forceLogout);
     return () => {
       socket.off('scoreboard_update', refreshCurrentUser);
+      socket.off('team_deleted', forceLogout);
     };
   }, [user?.id]);
 

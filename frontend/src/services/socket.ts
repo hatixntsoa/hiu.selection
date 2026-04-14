@@ -1,6 +1,27 @@
 import { io, Socket } from 'socket.io-client';
 
-const SOCKET_URL = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:3001';
+function resolveSocketUrl(): string {
+  const configuredApiUrl = import.meta.env.VITE_API_URL;
+  if (configuredApiUrl) {
+    if (configuredApiUrl.startsWith('http://') || configuredApiUrl.startsWith('https://')) {
+      return configuredApiUrl.replace(/\/api\/?$/, '');
+    }
+    if (configuredApiUrl.startsWith('/')) {
+      return window.location.origin;
+    }
+  }
+
+  if (typeof window !== 'undefined') {
+    const { protocol, hostname, port } = window.location;
+    if (port === '3000' || port === '5173' || port === '4173') {
+      return `${protocol}//${hostname}:3001`;
+    }
+  }
+
+  return window.location.origin;
+}
+
+const SOCKET_URL = resolveSocketUrl();
 
 let socket: Socket | null = null;
 
@@ -10,7 +31,13 @@ export function connectSocket(): Socket {
   }
 
   socket = io(SOCKET_URL, {
-    transports: ['websocket', 'polling']
+    transports: ['websocket', 'polling'],
+    auth: {
+      token: localStorage.getItem('token') || ''
+    },
+    reconnection: true,
+    reconnectionDelay: 300,
+    reconnectionDelayMax: 1500
   });
 
   socket.on('connect', () => {
