@@ -125,8 +125,9 @@ services:
       - HOST=0.0.0.0
       - JWT_SECRET=change-me
       - FRONTEND_URL=http://localhost:3000
+      - DB_PATH=/app/data/ctf.db
     volumes:
-      - ./backend/ctf.db:/app/ctf.db
+      - backend_data:/app/data
 
   frontend:
     build:
@@ -137,6 +138,9 @@ services:
       - "3000:80"
     depends_on:
       - backend
+
+volumes:
+  backend_data:
 ```
 
 ### Run with Docker Compose

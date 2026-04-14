@@ -2,9 +2,10 @@ import sqlite3 from 'sqlite3';
 import path from 'path';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
+import fs from 'fs';
 
 const sqlite = sqlite3.verbose();
-const DB_PATH = path.join(__dirname, '../../ctf.db');
+const DB_PATH = process.env.DB_PATH ? path.resolve(process.env.DB_PATH) : path.join(__dirname, '../../ctf.db');
 const ADMIN_USERNAME = 'admin';
 const ADMIN_EMAIL = 'admin@ctf.local';
 const ADMIN_PASSWORD_CONFIG_KEY = 'admin_plain_password';
@@ -17,14 +18,20 @@ function generateSecurePassword(): string {
 
 export function getDatabase(): sqlite3.Database {
   if (!db) {
+    const dbDirectory = path.dirname(DB_PATH);
+    if (!fs.existsSync(dbDirectory)) {
+      fs.mkdirSync(dbDirectory, { recursive: true });
+    }
+
     db = new sqlite.Database(DB_PATH, (err) => {
       if (err) {
         console.error('Error opening database:', err);
+        db = null;
       } else {
         console.log('Connected to SQLite database');
+        initializeDatabase();
       }
     });
-    initializeDatabase();
   }
   return db;
 }
