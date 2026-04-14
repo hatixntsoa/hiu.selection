@@ -3,7 +3,15 @@ export interface Team {
   name: string;
   email?: string;
   score: number;
+  memberCount?: number;
   isAdmin?: boolean;
+  created_at?: string;
+}
+
+export interface TeamMember {
+  id: number;
+  team_id: number;
+  username: string;
   created_at?: string;
 }
 

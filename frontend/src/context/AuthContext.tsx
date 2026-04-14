@@ -1,6 +1,7 @@
 import { createContext, ReactNode, useContext, useEffect, useState } from 'react';
 import api from '../services/api';
 import { Team } from '../types';
+import { connectSocket } from '../services/socket';
 
 type AuthContextValue = {
   user: Team | null;
@@ -26,6 +27,29 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
     }
     setLoading(false);
   }, []);
+
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    const socket = connectSocket();
+    const refreshCurrentUser = (): void => {
+      api
+        .get('/auth/me')
+        .then((response) => {
+          const freshTeam = response.data.team as Team;
+          setUser(freshTeam);
+          localStorage.setItem('team', JSON.stringify(freshTeam));
+        })
+        .catch(() => undefined);
+    };
+
+    socket.on('scoreboard_update', refreshCurrentUser);
+    return () => {
+      socket.off('scoreboard_update', refreshCurrentUser);
+    };
+  }, [user?.id]);
 
   const login = async (name: string, password: string): Promise<Team> => {
     const response = await api.post('/auth/login', { name, password });

@@ -2,7 +2,7 @@ import { Alert, Card, Col, Container, Form, Row } from 'react-bootstrap';
 import { usePreferences } from '../context/PreferencesContext';
 
 function SettingsPage(): JSX.Element {
-  const { themeMode, setThemeMode, language, setLanguage, fontFamily, setFontFamily, t } = usePreferences();
+  const { themeMode, setThemeMode, language, setLanguage, t } = usePreferences();
 
   return (
     <Container>
@@ -34,18 +34,6 @@ function SettingsPage(): JSX.Element {
                 >
                   <option value="en">{t('settingsLanguageEnglish')}</option>
                   <option value="fr">{t('settingsLanguageFrench')}</option>
-                </Form.Select>
-              </Form.Group>
-
-              <Form.Group className="mt-4">
-                <Form.Label className="fw-semibold">{t('settingsFontTitle')}</Form.Label>
-                <Form.Select
-                  value={fontFamily}
-                  onChange={(e) => setFontFamily(e.target.value as 'claude' | 'inter' | 'system')}
-                >
-                  <option value="claude">{t('settingsFontClaude')}</option>
-                  <option value="inter">{t('settingsFontInter')}</option>
-                  <option value="system">{t('settingsFontSystem')}</option>
                 </Form.Select>
               </Form.Group>
 

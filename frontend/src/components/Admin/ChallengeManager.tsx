@@ -276,7 +276,7 @@ function ChallengeManager({ onChallengeChange }: { onChallengeChange?: () => voi
                 name="flag"
                 value={formData.flag}
                 onChange={handleChange}
-                placeholder="flag{...}"
+                placeholder="HIU_2026{...}"
                 required
               />
             </Form.Group>

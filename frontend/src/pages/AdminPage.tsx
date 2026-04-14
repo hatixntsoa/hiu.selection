@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Card, Col, Container, Row, Tab, Table, Tabs } from 'react-bootstrap';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Card, Col, Container, Row, Table } from 'react-bootstrap';
+import { useParams } from 'react-router-dom';
 import api from '../services/api';
 import ChallengeManager from '../components/Admin/ChallengeManager';
 import LiveScoreboard from '../components/Admin/LiveScoreboard';
@@ -11,13 +11,13 @@ import { connectSocket } from '../services/socket';
 
 function AdminPage(): JSX.Element {
   const { section } = useParams<{ section?: string }>();
-  const navigate = useNavigate();
   const [teams, setTeams] = useState<ScoreboardTeam[]>([]);
   const [timer, setTimer] = useState<CtfTimerState | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const liveScoreboardRef = useRef<HTMLDivElement | null>(null);
   const { t, language } = usePreferences();
-  const isLiveScoreboardRoute = section === 'live-scoreboard';
+  const currentSection = section === 'teams' || section === 'timer' || section === 'live-scoreboard' ? section : 'challenges';
+  const isLiveScoreboardRoute = currentSection === 'live-scoreboard';
   const liveTimerLabel = timer?.isInfinite
     ? t('timerInfinite')
     : timer && !timer.isActive
@@ -110,26 +110,13 @@ function AdminPage(): JSX.Element {
             <LiveScoreboard teams={teams} />
           </Card.Body>
         </Card>
-      ) : (
-        <Tabs
-          activeKey={section === 'teams' || section === 'timer' ? section : 'challenges'}
-          onSelect={(key) => {
-            if (!key) {
-              return;
-            }
-            navigate(key === 'challenges' ? '/admin' : `/admin/${key}`);
-          }}
-          className="mb-4 admin-tabs"
-          fill
-        >
-          <Tab eventKey="challenges" title={t('adminTabChallenges')}>
+      ) : currentSection === 'challenges' ? (
             <Card className="mt-3 soft-card">
               <Card.Body>
                 <ChallengeManager onChallengeChange={fetchData} />
               </Card.Body>
             </Card>
-          </Tab>
-        <Tab eventKey="teams" title={t('adminTabTeams')}>
+      ) : currentSection === 'teams' ? (
           <Card className="mt-3 soft-card">
             <Card.Header>
               <h5 className="mb-0 section-title">{t('adminRegisteredTeams')}</h5>
@@ -159,13 +146,10 @@ function AdminPage(): JSX.Element {
               </Table>
             </Card.Body>
           </Card>
-        </Tab>
-        <Tab eventKey="timer" title={t('adminTabTimer')}>
+      ) : (
           <div className="mt-3">
             <TimerManager timer={timer} onTimerChange={setTimer} />
           </div>
-        </Tab>
-        </Tabs>
       )}
     </Container>
   );

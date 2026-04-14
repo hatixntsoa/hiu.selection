@@ -64,11 +64,11 @@ npm run dev
 
 | Challenge | Points | Flag |
 |-----------|--------|------|
-| Welcome | 50 | `flag{welcome_to_ctf}` |
-| Basic Crypto | 100 | `flag{caesar_encryption}` |
-| Web Basics | 150 | `flag{view_source_master}` |
-| Binary Explorer | 200 | `flag{binary_explorer_solved}` |
-| Database Dive | 250 | `flag{sql_master_2024}` |
+| Welcome | 50 | `HIU_2026{welcome_to_ctf}` |
+| Basic Crypto | 100 | `HIU_2026{caesar_encryption}` |
+| Web Basics | 150 | `HIU_2026{view_source_master}` |
+| Binary Explorer | 200 | `HIU_2026{binary_explorer_solved}` |
+| Database Dive | 250 | `HIU_2026{sql_master_2024}` |
 
 ## 🛠️ Testing the API
 
@@ -93,7 +93,7 @@ curl -X POST http://localhost:3001/api/auth/login \
 curl -X POST http://localhost:3001/api/flags/submit \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_TOKEN" \
-  -d '{"challengeId":1,"flag":"flag{welcome_to_ctf}"}'
+  -d '{"challengeId":1,"flag":"HIU_2026{welcome_to_ctf}"}'
 
 # View scoreboard
 curl http://localhost:3001/api/scoreboard

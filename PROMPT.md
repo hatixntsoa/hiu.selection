@@ -43,15 +43,17 @@ Build a polished CTF web app with:
 - `/login` should redirect to `/auth`.
 - Login and registration use **username + password only** (no email fields in UI).
 - Admin credentials use username/password (`admin` + configured password).
-- After login, admin users should land on **`/admin`** by default.
+- After login, admin users should land on **`/admin/challenges`** by default.
 - Team registration can join existing team if username+password match.
 - A team has a max of **6 members**.
+- Team members can log in with either **team name + team password** or **member username + team password**.
 
 ### Home CTA routing
 - "Login to Play" should open `/auth?tab=login`.
 - "Register Team" should open `/auth?tab=register`.
 - Auth page should open corresponding tab from query param.
 - Navbar **Home** tab is removed for all users; clicking the HIU Selection brand title is the home navigation.
+- Guest navbar should not show top-right login/get-started actions.
 
 ### Timer and locking
 - CTF timer is global/shared across all users (DB-backed).
@@ -81,8 +83,11 @@ Build a polished CTF web app with:
 
 ### Admin panel
 - Admin navigation includes:
-  - Admin panel
+  - Challenges (`/admin/challenges`)
+  - Teams (`/admin/teams`)
+  - CTF Timer (`/admin/timer`)
   - Live Scoreboard route (`/admin/live-scoreboard`)
+- `/admin` should redirect to `/admin/challenges`.
 - Live Scoreboard:
   - top 3 podium bars
   - others listed below
@@ -102,9 +107,27 @@ Build a polished CTF web app with:
 ### Theme / i18n / settings
 - Theme modes: system, light, dark.
 - Dark palette should feel GitHub-like.
-- Font options in settings.
+- Font is fixed to Claude style (no font selector in settings).
 - Language support: English + French.
 - Localize UI text and API messages where mapped.
+
+### Navbar / landing UX
+- Navbar is sticky with translucent blurred background.
+- CTF timer appears in navbar next to team identity.
+- Theme toggle is icon-only (moon in light mode, sun in dark mode) and placed left of logout/disconnect.
+- Team name in navbar opens team profile modal (rename team, manage members up to 6).
+- Landing opens with centered hero first; informational cards reveal on scroll with slide-up animation.
+- Rules card is shown first among landing cards.
+- Footer branding uses **Hackaton Inter-Universitaire** and links to:
+  - `https://web.facebook.com/profile.php?id=61554549129613`
+
+### Flag format standard
+- Canonical flag format is **`HIU_2026{...}`** across:
+  - seeded challenges
+  - admin challenge forms
+  - team flag submission placeholders
+  - home rules/docs examples
+- Legacy DB values using `flag{...}` or `FLAG{...}` are migrated to `HIU_2026{...}` at initialization.
 
 ## 4. Backend data model expectations
 

@@ -22,6 +22,7 @@ const io = new Server(server, {
 });
 
 setIO(io);
+app.set('io', io);
 
 app.use(cors());
 app.use(express.json());

@@ -17,7 +17,7 @@ function Scoreboard({
 
   return (
     <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-      <Table striped bordered hover responsive size="sm" className="warm-table">
+      <Table striped bordered hover responsive className="warm-table">
         <thead>
           <tr>
             <th>#</th>

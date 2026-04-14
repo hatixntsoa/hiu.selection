@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Card, Container } from 'react-bootstrap';
 import api from '../services/api';
+import { connectSocket } from '../services/socket';
 import { useAuth } from '../context/AuthContext';
 import { ScoreboardTeam } from '../types';
 import { usePreferences } from '../context/PreferencesContext';
@@ -11,10 +12,19 @@ function CtfEndedPage(): JSX.Element {
   const [scoreboard, setScoreboard] = useState<ScoreboardTeam[]>([]);
 
   useEffect(() => {
-    api
-      .get('/scoreboard')
-      .then((response) => setScoreboard(response.data.scoreboard as ScoreboardTeam[]))
-      .catch(() => undefined);
+    const loadScoreboard = (): void => {
+      api
+        .get('/scoreboard')
+        .then((response) => setScoreboard(response.data.scoreboard as ScoreboardTeam[]))
+        .catch(() => undefined);
+    };
+
+    loadScoreboard();
+    const socket = connectSocket();
+    socket.on('scoreboard_update', loadScoreboard);
+    return () => {
+      socket.off('scoreboard_update', loadScoreboard);
+    };
   }, []);
 
   const rank = useMemo(() => {

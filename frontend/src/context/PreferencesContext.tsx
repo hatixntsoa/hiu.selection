@@ -7,7 +7,6 @@ type ResolvedTheme = 'light' | 'dark';
 
 const THEME_STORAGE_KEY = 'theme-mode';
 const LANGUAGE_STORAGE_KEY = 'language';
-const FONT_STORAGE_KEY = 'font-family-mode';
 
 type PreferencesContextValue = {
   themeMode: ThemeMode;
@@ -51,6 +50,9 @@ const apiMessageMap: Record<string, TranslationKey> = {
   'Category already exists': 'apiCategoryExists',
   'Failed to create category': 'apiFailedCreateCategory',
   'Category created': 'apiCategoryCreated',
+  'Team updated': 'apiTeamUpdated',
+  'Member added': 'apiMemberAdded',
+  'Team not found': 'apiTeamNotFound',
   'Team has reached the maximum of 6 members': 'apiTeamMaxMembers',
   'CTF is finished. Access is locked for team accounts.': 'apiCtfFinishedLocked',
   'Challenge ID and flag are required': 'apiChallengeIdFlagRequired',
@@ -77,8 +79,7 @@ function getInitialLanguage(): Language {
 }
 
 function getInitialFontFamily(): FontFamilyMode {
-  const stored = localStorage.getItem(FONT_STORAGE_KEY);
-  return stored === 'claude' || stored === 'inter' || stored === 'system' ? stored : 'claude';
+  return 'claude';
 }
 
 function resolveTheme(mode: ThemeMode, systemDark: boolean): ResolvedTheme {
@@ -91,7 +92,7 @@ function resolveTheme(mode: ThemeMode, systemDark: boolean): ResolvedTheme {
 export function PreferencesProvider({ children }: { children: ReactNode }): JSX.Element {
   const [themeMode, setThemeModeState] = useState<ThemeMode>(getInitialThemeMode);
   const [language, setLanguageState] = useState<Language>(getInitialLanguage);
-  const [fontFamily, setFontFamilyState] = useState<FontFamilyMode>(getInitialFontFamily);
+  const [fontFamily] = useState<FontFamilyMode>(getInitialFontFamily);
   const [systemDark, setSystemDark] = useState<boolean>(() => window.matchMedia('(prefers-color-scheme: dark)').matches);
 
   useEffect(() => {
@@ -114,8 +115,7 @@ export function PreferencesProvider({ children }: { children: ReactNode }): JSX.
   }, [language]);
 
   useEffect(() => {
-    localStorage.setItem(FONT_STORAGE_KEY, fontFamily);
-    document.documentElement.setAttribute('data-font', fontFamily);
+    document.documentElement.setAttribute('data-font', 'claude');
   }, [fontFamily]);
 
   const setThemeMode = (mode: ThemeMode): void => {
@@ -132,7 +132,7 @@ export function PreferencesProvider({ children }: { children: ReactNode }): JSX.
   };
 
   const setFontFamily = (nextFontFamily: FontFamilyMode): void => {
-    setFontFamilyState(nextFontFamily);
+    void nextFontFamily;
   };
 
   const t = (key: TranslationKey, params?: Record<string, string | number>): string => {

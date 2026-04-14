@@ -52,6 +52,16 @@ function initializeDatabase(): void {
     });
 
     db!.run(`
+      CREATE TABLE IF NOT EXISTS team_members (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        team_id INTEGER NOT NULL,
+        username TEXT UNIQUE COLLATE NOCASE NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (team_id) REFERENCES teams(id)
+      )
+    `);
+
+    db!.run(`
       CREATE TABLE IF NOT EXISTS categories (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT UNIQUE COLLATE NOCASE NOT NULL,
@@ -107,12 +117,27 @@ function initializeDatabase(): void {
       ['admin', 'admin@ctf.local', adminPassword]
     );
 
+    db!.run(
+      `INSERT OR IGNORE INTO team_members (team_id, username)
+       SELECT t.id, t.name
+       FROM teams t
+       LEFT JOIN team_members tm ON tm.team_id = t.id
+       WHERE tm.id IS NULL`
+    );
+
+    db!.run(
+      `UPDATE teams
+       SET member_count = (
+         SELECT COUNT(*) FROM team_members tm WHERE tm.team_id = teams.id
+       )`
+    );
+
     const sampleChallenges: Array<[string, string, string, number, string]> = [
-      ['Welcome', 'Find the flag in the welcome message!', 'Misc', 50, 'flag{welcome_to_ctf}'],
-      ['Basic Crypto', 'Decrypt this Caesar cipher: syne{pnrfne_rpelcgb}', 'Crypto', 100, 'flag{caesar_encryption}'],
-      ['Web Basics', 'Inspect the page source to find the hidden flag', 'Web', 150, 'flag{view_source_master}'],
-      ['Binary Explorer', 'Analyze the binary and extract the flag', 'Reverse', 200, 'flag{binary_explorer_solved}'],
-      ['Database Dive', 'Query the database to uncover the secret', 'SQL', 250, 'flag{sql_master_2024}']
+      ['Welcome', 'Find the flag in the welcome message!', 'Misc', 50, 'HIU_2026{welcome_to_ctf}'],
+      ['Basic Crypto', 'Decrypt this Caesar cipher: syne{pnrfne_rpelcgb}', 'Crypto', 100, 'HIU_2026{caesar_encryption}'],
+      ['Web Basics', 'Inspect the page source to find the hidden flag', 'Web', 150, 'HIU_2026{view_source_master}'],
+      ['Binary Explorer', 'Analyze the binary and extract the flag', 'Reverse', 200, 'HIU_2026{binary_explorer_solved}'],
+      ['Database Dive', 'Query the database to uncover the secret', 'SQL', 250, 'HIU_2026{sql_master_2024}']
     ];
 
     const defaultCategories = ['Web', 'Crypto', 'Reverse', 'Misc', 'SQL', 'Forensics'];
@@ -127,6 +152,17 @@ function initializeDatabase(): void {
         [title, desc, category, points, flag]
       );
     });
+
+    db!.run(`
+      UPDATE challenges
+      SET flag = REPLACE(REPLACE(flag, 'FLAG{', 'HIU_2026{'), 'flag{', 'HIU_2026{')
+      WHERE flag LIKE '%flag{%' COLLATE NOCASE
+    `);
+    db!.run(`
+      UPDATE challenges
+      SET description = REPLACE(REPLACE(description, 'FLAG{', 'HIU_2026{'), 'flag{', 'HIU_2026{')
+      WHERE description LIKE '%flag{%' COLLATE NOCASE
+    `);
 
     console.log('Database initialization complete');
   });

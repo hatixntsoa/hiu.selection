@@ -211,6 +211,7 @@ function DashboardPage(): JSX.Element {
   const rank = scoreboard.findIndex((team) => team.id === user?.id) + 1;
   const activeSolved = activeChallenge ? solvedChallenges.has(activeChallenge.id) : false;
   const challengesDisabled = Boolean(timer && !timer.canSubmit);
+  const challengeDisabledMessage = timer && !timer.isActive ? t('dashboardChallengesNotStarted') : t('dashboardChallengesClosed');
   const timerLabel = timer?.isInfinite
     ? t('timerInfinite')
     : timer && !timer.isActive
@@ -306,11 +307,7 @@ function DashboardPage(): JSX.Element {
             <h5 className="mb-0 section-title">{t('dashboardChallenges')}</h5>
           </Card.Header>
           <Card.Body>
-            {challengesDisabled && (
-              <Alert variant="danger" className="mb-3">
-                {t('dashboardChallengesClosed')}
-              </Alert>
-            )}
+            {challengesDisabled && <Alert variant={timer?.isActive ? 'danger' : 'secondary'} className="mb-3">{challengeDisabledMessage}</Alert>}
             <ChallengeList
               challenges={challenges}
               solvedChallenges={solvedChallenges}
@@ -340,7 +337,7 @@ function DashboardPage(): JSX.Element {
               <Form.Label>{t('dashboardFlagLabel')}</Form.Label>
               <Form.Control
                 type="text"
-                placeholder="flag{...}"
+                placeholder="HIU_2026{...}"
                 value={flagInput}
                 onChange={(e) => setFlagInput(e.target.value)}
                 disabled={activeSolved || challengesDisabled}

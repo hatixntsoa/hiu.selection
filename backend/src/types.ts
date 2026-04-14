@@ -15,6 +15,13 @@ export interface TeamRow {
   created_at: string;
 }
 
+export interface TeamMemberRow {
+  id: number;
+  team_id: number;
+  username: string;
+  created_at: string;
+}
+
 export interface ChallengeRow {
   id: number;
   title: string;
