@@ -4,6 +4,7 @@ import {
   addTimerSeconds,
   getCtfTimerState,
   restartFiniteTimer,
+  startFiniteTimer,
   setFiniteDuration,
   setInfiniteTimer
 } from '../models/timer';
@@ -132,6 +133,20 @@ export async function restartTimer(req: Request, res: Response): Promise<Respons
     return res.json({ message: 'CTF timer restarted', timer });
   } catch {
     return res.status(500).json({ error: 'Failed to restart timer' });
+  }
+}
+
+export async function startTimer(req: Request, res: Response): Promise<Response> {
+  const { durationSeconds } = req.body as TimerRequestBody;
+  if (typeof durationSeconds !== 'undefined' && (typeof durationSeconds !== 'number' || !Number.isFinite(durationSeconds))) {
+    return res.status(400).json({ error: 'Duration must be a valid number of seconds' });
+  }
+
+  try {
+    const timer = await startFiniteTimer(durationSeconds);
+    return res.json({ message: 'CTF timer started', timer });
+  } catch {
+    return res.status(500).json({ error: 'Failed to start timer' });
   }
 }
 

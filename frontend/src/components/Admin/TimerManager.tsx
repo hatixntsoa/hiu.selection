@@ -34,6 +34,9 @@ function TimerManager({
     if (!timer) {
       return t('timerNotStarted');
     }
+    if (!timer.isActive) {
+      return t('timerNotStarted');
+    }
     if (timer.isInfinite) {
       return t('timerInfinite');
     }
@@ -46,12 +49,14 @@ function TimerManager({
     return t('timerNotStarted');
   }, [timer, t]);
 
-  const statusVariant = timer?.isInfinite ? 'warning' : timer?.canSubmit ? 'success' : 'danger';
-  const statusText = timer?.isInfinite
-    ? t('timerInfinite')
-    : timer?.canSubmit
-      ? t('adminTimerStatusRunning')
-      : t('adminTimerStatusExpired');
+  const statusVariant = !timer?.isActive ? 'secondary' : timer?.isInfinite ? 'warning' : timer?.isExpired ? 'danger' : 'success';
+  const statusText = !timer?.isActive
+    ? t('adminTimerStatusStopped')
+    : timer?.isInfinite
+      ? t('timerInfinite')
+      : timer?.isExpired
+        ? t('adminTimerStatusExpired')
+        : t('adminTimerStatusRunning');
 
   const safeDurationMinutes = (): number => {
     const parsed = Number(durationMinutes);
@@ -92,6 +97,13 @@ function TimerManager({
   const handleRestart = async (): Promise<void> => {
     await runAction(async () => {
       const response = await api.post('/scoreboard/timer/restart', { durationSeconds: safeDurationMinutes() * 60 });
+      return response.data.timer as CtfTimerState;
+    });
+  };
+
+  const handleStart = async (): Promise<void> => {
+    await runAction(async () => {
+      const response = await api.post('/scoreboard/timer/start', { durationSeconds: safeDurationMinutes() * 60 });
       return response.data.timer as CtfTimerState;
     });
   };
@@ -142,6 +154,11 @@ function TimerManager({
             <Col md="auto">
               <Button type="submit" variant="primary">
                 {t('adminTimerSaveDuration')}
+              </Button>
+            </Col>
+            <Col md="auto">
+              <Button type="button" variant="success" onClick={handleStart}>
+                {t('adminTimerStart')}
               </Button>
             </Col>
             <Col md="auto">

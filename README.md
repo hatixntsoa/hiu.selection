@@ -1,235 +1,187 @@
-# CTF Platform
+# HIU Selection CTF Platform
 
-A full-stack Capture The Flag (CTF) platform with real-time scoring, team authentication, and live dashboard.
+A full-stack CTF platform with real-time scoring, admin controls, timer-based competition locking, themed multilingual UI, and spectator-ready live scoreboard.
 
-## Features
+## Current state (implemented)
 
-✅ **Team Authentication** - Register and login with JWT-based auth  
-✅ **Flag Submission** - Submit flags for multiple challenges  
-✅ **Live Dashboard** - Real-time scoreboard with Socket.io  
-✅ **Challenge Management** - Admin panel to create/edit/delete challenges  
-✅ **Activity Feed** - Live feed showing recent flag captures  
-✅ **Responsive UI** - Built with React and Bootstrap  
+- **Auth route/UI:** `/auth` (with `/login` redirect compatibility)
+- **Credentials:** username + password only (no email in UI)
+- **Team member model:** up to **6 members** can join the same team using the same team name/password
+- **Admin account:** `admin / admin123` (or `ADMIN_PASSWORD` if set)
+- **Dashboard navigation:** top tabs (Ranking, Scoreboard, Live Activity, Challenges)
+- **Challenges UX:** click challenge card -> submit flag modal + confetti on correct flag
+- **Live updates:** scoreboard/activity via Socket.IO
+- **Themes:** system/light/dark with GitHub-style dark palette
+- **Settings:** theme, language (EN/FR), font family
+- **i18n:** UI text localized (EN/FR)
+- **Admin features:** challenge CRUD, category management, CTF timer controls, teams list, live scoreboard view (with fullscreen button)
+- **CTF timer controls (admin):** set duration, restart, add time, infinite mode
+- **Timer enforcement:** non-admin submissions locked when timer is over
+- **End state for teams:** when CTF ends, team users are redirected to an end page with team name, rank, and points
 
-## Tech Stack
+## Tech stack
 
-**Backend:**
-- Node.js + Express.js
-- SQLite (database)
-- Socket.io (real-time updates)
-- JWT + bcrypt (authentication)
+### Backend
+- Node.js + Express + TypeScript
+- SQLite (`backend/ctf.db`)
+- JWT auth
+- bcrypt password hashing
+- Socket.IO
+- express-rate-limit
 
-**Frontend:**
-- React 18
-- Vite
-- React Bootstrap
-- Socket.io Client
+### Frontend
+- React + TypeScript + Vite
+- React Router
+- React Bootstrap + custom theme CSS
 - Axios
+- Socket.IO client
+- Chart.js (`react-chartjs-2`)
+- `canvas-confetti`
 
-## Project Structure
+## Project structure
 
-```
+```text
 ctf/
-├── backend/                 # Backend API server
+├── backend/
 │   ├── src/
-│   │   ├── controllers/    # Route controllers
-│   │   ├── models/         # Database models
-│   │   ├── middleware/     # Auth & admin middleware
-│   │   ├── routes/         # API routes
-│   │   └── server.js       # Main server file
-│   ├── package.json
-│   └── .env
-├── frontend/               # React frontend
+│   │   ├── controllers/
+│   │   ├── middleware/
+│   │   ├── models/
+│   │   ├── routes/
+│   │   └── server.ts
+│   ├── Dockerfile
+│   └── .dockerignore
+├── frontend/
 │   ├── src/
-│   │   ├── components/     # Reusable components
-│   │   ├── pages/          # Page components
-│   │   ├── context/        # Auth context
-│   │   ├── services/       # API & socket services
-│   │   └── App.jsx
-│   ├── package.json
-│   └── vite.config.js
-└── INSTRUCTIONS.md         # Build instructions
+│   │   ├── components/
+│   │   ├── context/
+│   │   ├── i18n/
+│   │   ├── pages/
+│   │   ├── services/
+│   │   ├── App.tsx
+│   │   └── main.tsx
+│   ├── Dockerfile
+│   ├── nginx.conf
+│   └── .dockerignore
+├── INSTRUCTIONS.md
+├── QUICKSTART.md
+└── start.sh
 ```
 
-## Getting Started
+## Local development
 
-### Prerequisites
+### 1. Install dependencies
 
-- Node.js (v16 or higher)
-- npm
+```bash
+cd backend && npm install
+cd ../frontend && npm install
+```
 
-### Installation
+### 2. Run backend
 
-1. **Clone or navigate to the project:**
-   ```bash
-   cd /home/hatixntsoa/Desktop/c3lf/ctf
-   ```
-
-2. **Install backend dependencies:**
-   ```bash
-   cd backend
-   npm install
-   ```
-
-3. **Install frontend dependencies:**
-   ```bash
-   cd ../frontend
-   npm install
-   ```
-
-### Running the Application
-
-#### Option 1: Run both servers (Development)
-
-**Terminal 1 - Backend:**
 ```bash
 cd backend
 npm start
 ```
-Backend runs on: `http://localhost:3001`
 
-**Terminal 2 - Frontend:**
+Backend: `http://localhost:3001`
+
+### 3. Run frontend
+
 ```bash
 cd frontend
 npm run dev
 ```
-Frontend runs on: `http://localhost:3000`
 
-#### Option 2: Quick Start Script
+Frontend: `http://localhost:3000`
 
-Create a `start.sh` file:
+### Quick script
+
 ```bash
-#!/bin/bash
-
-# Start backend
-cd backend
-npm start &
-BACKEND_PID=$!
-
-# Wait for backend to start
-sleep 2
-
-# Start frontend
-cd ../frontend
-npm run dev &
-FRONTEND_PID=$!
-
-# Handle cleanup on exit
-trap "kill $BACKEND_PID $FRONTEND_PID" EXIT
-
-# Wait for both
-wait
-```
-
-Make it executable and run:
-```bash
-chmod +x start.sh
 ./start.sh
 ```
 
-### Default Admin Credentials
+## Docker support
 
-- **Email:** `admin@ctf.local`
-- **Password:** `admin123`
+Both services now include Docker support:
 
-You can change the admin password in `backend/.env`
+- `backend/Dockerfile`
+- `backend/.dockerignore`
+- `frontend/Dockerfile`
+- `frontend/.dockerignore`
+- `frontend/nginx.conf` (SPA route fallback)
 
-## API Endpoints
+### Example `docker-compose.yml`
 
-### Authentication
-- `POST /api/auth/register` - Register new team
-- `POST /api/auth/login` - Login team
-- `GET /api/auth/me` - Get current team info (requires auth)
+```yaml
+services:
+  backend:
+    build:
+      context: ./backend
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+      - HOST=0.0.0.0
+      - JWT_SECRET=change-me
+      - ADMIN_PASSWORD=admin123
+      - FRONTEND_URL=http://localhost:3000
+    volumes:
+      - ./backend/ctf.db:/app/ctf.db
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: http://localhost:3001/api
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+```
+
+### Run with Docker Compose
+
+```bash
+docker compose up --build
+```
+
+Then open:
+
+- Frontend: `http://localhost:3000`
+- Backend health: `http://localhost:3001/api/health`
+
+## Main API routes
+
+### Auth
+- `POST /api/auth/register` (username + password)
+- `POST /api/auth/login` (username + password)
+- `GET /api/auth/me`
 
 ### Challenges
-- `GET /api/challenges` - List all challenges (public)
-- `GET /api/challenges/:id` - Get challenge details
-- `POST /api/challenges` - Create challenge (admin only)
-- `PUT /api/challenges/:id` - Update challenge (admin only)
-- `DELETE /api/challenges/:id` - Delete challenge (admin only)
+- `GET /api/challenges`
+- `GET /api/challenges/:id`
+- `GET /api/challenges/categories`
+- `POST /api/challenges` (admin)
+- `POST /api/challenges/categories` (admin)
+- `PUT /api/challenges/:id` (admin)
+- `DELETE /api/challenges/:id` (admin)
 
 ### Flags
-- `POST /api/flags/submit` - Submit a flag (rate limited)
-- `GET /api/flags/history` - Get team's submission history
+- `POST /api/flags/submit`
+- `GET /api/flags/history`
 
-### Scoreboard
-- `GET /api/scoreboard` - Get current rankings
-- `GET /api/scoreboard/activity` - Get recent activity
-- `GET /api/scoreboard/stats` - Get CTF statistics
+### Scoreboard + timer
+- `GET /api/scoreboard`
+- `GET /api/scoreboard/activity`
+- `GET /api/scoreboard/stats`
+- `GET /api/scoreboard/timer`
+- `PUT /api/scoreboard/timer` (admin)
+- `POST /api/scoreboard/timer/restart` (admin)
+- `POST /api/scoreboard/timer/add-time` (admin)
+- `POST /api/scoreboard/timer/infinite` (admin)
 
-## Flag Format
+## Notes
 
-All flags follow the format: `flag{...}`
-
-Flags are case-insensitive when submitted.
-
-## Database
-
-The platform uses SQLite for persistence. The database file (`ctf.db`) is automatically created in the `backend/` directory on first run.
-
-### Sample Challenges
-
-5 sample challenges are pre-loaded:
-- Welcome (50 pts) - `flag{welcome_to_ctf}`
-- Basic Crypto (100 pts) - `flag{caesar_encryption}`
-- Web Basics (150 pts) - `flag{view_source_master}`
-- Binary Explorer (200 pts) - `flag{binary_explorer_solved}`
-- Database Dive (250 pts) - `flag{sql_master_2024}`
-
-## Security Features
-
-- ✅ JWT-based authentication
-- ✅ Password hashing with bcrypt
-- ✅ Rate limiting on flag submissions (30/min)
-- ✅ Protected routes with middleware
-- ✅ Admin-only routes
-- ✅ SQL injection prevention (parameterized queries)
-- ✅ CORS configuration
-
-## Screenshots
-
-### Home Page
-Public landing page with CTF information and rules
-
-### Dashboard
-- Team statistics (points, solved challenges, rank)
-- Challenge browsing with categories
-- Flag submission form
-- Live scoreboard
-- Real-time activity feed
-
-### Admin Panel
-- Create/Edit/Delete challenges
-- View all registered teams
-- Monitor CTF progress
-
-## Troubleshooting
-
-### Backend won't start
-- Check if port 3001 is already in use
-- Ensure all dependencies are installed: `npm install`
-- Check `backend/.env` configuration
-
-### Frontend build errors
-- Clear node_modules and reinstall: 
-  ```bash
-  rm -rf node_modules
-  npm install
-  ```
-- Check Node.js version (v16+)
-
-### Database issues
-- Delete `ctf.db` to reset everything
-- Database is auto-created on first run
-
-## License
-
-MIT
-
-## Built With
-
-- [Express.js](https://expressjs.com/) - Backend framework
-- [React](https://react.dev/) - Frontend library
-- [Socket.io](https://socket.io/) - Real-time communication
-- [SQLite](https://www.sqlite.org/) - Database
-- [Bootstrap](https://getbootstrap.com/) - UI framework
+- `0.0.0.0` is used for server binding; browser access should use `localhost` (or your host/IP), not `0.0.0.0`.
+- Challenge display IDs are generated in the format `category#n` (e.g. `crypto#1`, `web#2`) based on sorted challenge order.

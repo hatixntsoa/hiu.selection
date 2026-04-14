@@ -29,7 +29,7 @@ function LoginPage(): JSX.Element {
   }, [initialTab]);
 
   if (user) {
-    navigate('/dashboard');
+    navigate(user.isAdmin ? '/admin' : '/dashboard');
   }
 
   const handleLogin = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
@@ -38,8 +38,8 @@ function LoginPage(): JSX.Element {
     setLoading(true);
 
     try {
-      await login(formData.name, formData.password);
-      navigate('/dashboard');
+      const loggedInUser = await login(formData.name, formData.password);
+      navigate(loggedInUser.isAdmin ? '/admin' : '/dashboard');
     } catch (err: any) {
       setError(localizeApiMessage(err.response?.data?.error || t('authErrorLoginFailed')));
     } finally {
@@ -53,8 +53,8 @@ function LoginPage(): JSX.Element {
     setLoading(true);
 
     try {
-      await register(formData.name, formData.password);
-      navigate('/dashboard');
+      const registeredUser = await register(formData.name, formData.password);
+      navigate(registeredUser.isAdmin ? '/admin' : '/dashboard');
     } catch (err: any) {
       setError(localizeApiMessage(err.response?.data?.error || t('authErrorRegistrationFailed')));
     } finally {

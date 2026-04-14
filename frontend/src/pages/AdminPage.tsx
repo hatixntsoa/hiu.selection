@@ -18,6 +18,13 @@ function AdminPage(): JSX.Element {
   const liveScoreboardRef = useRef<HTMLDivElement | null>(null);
   const { t, language } = usePreferences();
   const isLiveScoreboardRoute = section === 'live-scoreboard';
+  const liveTimerLabel = timer?.isInfinite
+    ? t('timerInfinite')
+    : timer && !timer.isActive
+      ? t('timerNotStarted')
+    : typeof timer?.timeLeftSeconds === 'number'
+      ? new Date(timer.timeLeftSeconds * 1000).toISOString().substring(11, 19)
+      : t('timerFinished');
 
   const fetchData = async (): Promise<void> => {
     try {
@@ -81,7 +88,12 @@ function AdminPage(): JSX.Element {
       {isLiveScoreboardRoute ? (
         <Card className="mt-2 soft-card live-scoreboard-screen" ref={liveScoreboardRef}>
           <Card.Header className="d-flex justify-content-between align-items-center">
-            <h3 className="mb-0 section-title">{t('adminLiveTitle')}</h3>
+            <div className="d-flex align-items-center gap-2">
+              <h3 className="mb-0 section-title">{t('adminLiveTitle')}</h3>
+              <span className={`badge rounded-pill live-timer-pill ${timer?.canSubmit ? 'text-bg-success' : 'text-bg-danger'}`}>
+                {t('timerLabel')}: {liveTimerLabel}
+              </span>
+            </div>
             <button
               type="button"
               className="btn btn-outline-secondary btn-sm"
@@ -111,12 +123,12 @@ function AdminPage(): JSX.Element {
           fill
         >
           <Tab eventKey="challenges" title={t('adminTabChallenges')}>
-          <Card className="mt-3 soft-card">
-            <Card.Body>
-              <ChallengeManager onChallengeChange={fetchData} />
-            </Card.Body>
-          </Card>
-        </Tab>
+            <Card className="mt-3 soft-card">
+              <Card.Body>
+                <ChallengeManager onChallengeChange={fetchData} />
+              </Card.Body>
+            </Card>
+          </Tab>
         <Tab eventKey="teams" title={t('adminTabTeams')}>
           <Card className="mt-3 soft-card">
             <Card.Header>

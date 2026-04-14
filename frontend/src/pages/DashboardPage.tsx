@@ -213,11 +213,11 @@ function DashboardPage(): JSX.Element {
   const challengesDisabled = Boolean(timer && !timer.canSubmit);
   const timerLabel = timer?.isInfinite
     ? t('timerInfinite')
+    : timer && !timer.isActive
+      ? t('timerNotStarted')
     : typeof timer?.timeLeftSeconds === 'number'
       ? new Date(timer.timeLeftSeconds * 1000).toISOString().substring(11, 19)
-      : timer?.canSubmit
-        ? t('timerNotStarted')
-        : t('timerFinished');
+      : t('timerFinished');
 
   return (
     <Container fluid>

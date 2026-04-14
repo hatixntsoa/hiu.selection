@@ -1,0 +1,24 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: 3001
+      HOST: 0.0.0.0
+      JWT_SECRET: change-me
+      ADMIN_PASSWORD: admin123
+      FRONTEND_URL: http://localhost:3000
+    volumes:
+      - ./backend/ctf.db:/app/ctf.db
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: http://localhost:3001/api
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend

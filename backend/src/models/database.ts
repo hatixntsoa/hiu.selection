@@ -87,17 +87,17 @@ function initializeDatabase(): void {
     db!.run(`
       CREATE TABLE IF NOT EXISTS ctf_timer (
         id INTEGER PRIMARY KEY CHECK (id = 1),
-        is_active INTEGER NOT NULL DEFAULT 1,
+        is_active INTEGER NOT NULL DEFAULT 0,
         is_infinite INTEGER NOT NULL DEFAULT 0,
         duration_seconds INTEGER NOT NULL DEFAULT 7200,
-        started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        started_at DATETIME DEFAULT NULL,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
     db!.run(
       `INSERT OR IGNORE INTO ctf_timer (id, is_active, is_infinite, duration_seconds, started_at)
-       VALUES (1, 1, 0, 7200, CURRENT_TIMESTAMP)`
+       VALUES (1, 0, 0, 7200, NULL)`
     );
 
     const adminPassword = bcrypt.hashSync(process.env.ADMIN_PASSWORD || 'admin123', 10);

@@ -42,7 +42,7 @@ function Navbar(): JSX.Element {
     };
   }, [user]);
 
-  const isLockedForTeam = Boolean(user && !user.isAdmin && timer && !timer.canSubmit);
+  const isLockedForTeam = Boolean(user && !user.isAdmin && timer?.isExpired);
   const challengesDisabled = Boolean(timer && !timer.canSubmit);
   return (
     <BSNavbar expand="lg" className="app-navbar shadow-sm">
@@ -56,10 +56,7 @@ function Navbar(): JSX.Element {
         <BSNavbar.Toggle aria-controls="navbar-nav" />
         <BSNavbar.Collapse id="navbar-nav">
           <Nav className="me-auto">
-            <Nav.Link as={Link} to={isLockedForTeam ? '/ctf-ended' : '/'} active={location.pathname === '/'}>
-              {t('navHome')}
-            </Nav.Link>
-            {user && !isLockedForTeam && (
+            {user && !user.isAdmin && !isLockedForTeam && (
               <>
                 <Nav.Link as={Link} to="/dashboard/ranking" active={location.pathname === '/dashboard/ranking'}>
                   {t('dashboardTabRanking')}

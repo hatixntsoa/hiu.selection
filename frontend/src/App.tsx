@@ -56,11 +56,11 @@ function CompetitionLockGate(): null {
             return;
           }
           const timer = response.data.timer as CtfTimerState;
-          if (!timer.canSubmit && location.pathname !== '/ctf-ended') {
+          if (timer.isExpired && location.pathname !== '/ctf-ended') {
             navigate('/ctf-ended', { replace: true });
             return;
           }
-          if (timer.canSubmit && location.pathname === '/ctf-ended') {
+          if (!timer.isExpired && location.pathname === '/ctf-ended') {
             navigate('/dashboard/scoreboard', { replace: true });
           }
         })

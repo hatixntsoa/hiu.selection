@@ -50,7 +50,7 @@ function get<T>(query: string, params: Array<string | number | null> = []): Prom
 async function ensureTimerRow(): Promise<void> {
   await run(
     `INSERT OR IGNORE INTO ctf_timer (id, is_active, is_infinite, duration_seconds, started_at, updated_at)
-     VALUES (1, 1, 0, 7200, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+     VALUES (1, 0, 0, 7200, NULL, CURRENT_TIMESTAMP)`
   );
 }
 
@@ -161,10 +161,30 @@ export async function setFiniteDuration(durationSeconds: number): Promise<CtfTim
   const normalized = Math.max(60, Math.floor(durationSeconds));
   await run(
     `UPDATE ctf_timer
-     SET is_active = 1, is_infinite = 0, duration_seconds = ?, started_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+     SET is_active = 0, is_infinite = 0, duration_seconds = ?, started_at = NULL, updated_at = CURRENT_TIMESTAMP
      WHERE id = 1`,
     [normalized]
   );
+  return getCtfTimerState();
+}
+
+export async function startFiniteTimer(durationSeconds?: number): Promise<CtfTimerState> {
+  await ensureTimerRow();
+  if (typeof durationSeconds === 'number') {
+    const normalized = Math.max(60, Math.floor(durationSeconds));
+    await run(
+      `UPDATE ctf_timer
+       SET is_active = 1, is_infinite = 0, duration_seconds = ?, started_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+       WHERE id = 1`,
+      [normalized]
+    );
+  } else {
+    await run(
+      `UPDATE ctf_timer
+       SET is_active = 1, is_infinite = 0, started_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+       WHERE id = 1`
+    );
+  }
   return getCtfTimerState();
 }
 

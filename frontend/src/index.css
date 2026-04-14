@@ -518,6 +518,13 @@ h6,
   padding: 0.35rem;
 }
 
+.live-timer-pill {
+  font-size: 1.2rem;
+  font-weight: 800;
+  padding: 0.28rem 0.72rem;
+  letter-spacing: 0.01em;
+}
+
 .podium-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -631,6 +638,11 @@ h6,
 
 .live-scoreboard-screen:fullscreen .card-header {
   border-radius: 0;
+}
+
+.live-scoreboard-screen:fullscreen .live-timer-pill {
+  font-size: 1.2rem;
+  padding: 0.28rem 0.72rem;
 }
 
 .live-scoreboard-screen:fullscreen .card-body {

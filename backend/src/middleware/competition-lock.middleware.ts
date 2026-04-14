@@ -22,7 +22,7 @@ export async function competitionLockMiddleware(req: Request, res: Response, nex
 
     try {
       const timer = await getCtfTimerState();
-      if (!timer.canSubmit) {
+      if (timer.isExpired) {
         return res.status(403).json({ error: 'CTF is finished. Access is locked for team accounts.' });
       }
       return next();
