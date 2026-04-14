@@ -1,11 +1,19 @@
 import sqlite3 from 'sqlite3';
 import path from 'path';
 import bcrypt from 'bcrypt';
+import crypto from 'crypto';
 
 const sqlite = sqlite3.verbose();
 const DB_PATH = path.join(__dirname, '../../ctf.db');
+const ADMIN_USERNAME = 'admin';
+const ADMIN_EMAIL = 'admin@ctf.local';
+const ADMIN_PASSWORD_CONFIG_KEY = 'admin_plain_password';
 
 let db: sqlite3.Database | null = null;
+
+function generateSecurePassword(): string {
+  return crypto.randomBytes(24).toString('base64url');
+}
 
 export function getDatabase(): sqlite3.Database {
   if (!db) {
@@ -117,11 +125,85 @@ function initializeDatabase(): void {
        VALUES (1, 0, 0, 7200, NULL)`
     );
 
-    const adminPassword = bcrypt.hashSync(process.env.ADMIN_PASSWORD || 'admin123', 10);
-    db!.run(
-      `INSERT OR IGNORE INTO teams (name, email, password, is_admin, score) 
-       VALUES (?, ?, ?, 1, 0)`,
-      ['admin', 'admin@ctf.local', adminPassword]
+    db!.run(`
+      CREATE TABLE IF NOT EXISTS app_config (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )
+    `);
+
+    db!.get<{ id: number }>(
+      `SELECT id FROM teams WHERE is_admin = 1 OR name = ? COLLATE NOCASE ORDER BY id ASC LIMIT 1`,
+      [ADMIN_USERNAME],
+      (adminLookupErr, adminTeam) => {
+        if (adminLookupErr) {
+          console.error('Error checking admin account:', adminLookupErr);
+          return;
+        }
+
+        const persistAndPrintAdminPassword = (password: string): void => {
+          db!.run(
+            `INSERT INTO app_config (key, value) VALUES (?, ?)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+            [ADMIN_PASSWORD_CONFIG_KEY, password],
+            (persistErr) => {
+              if (persistErr) {
+                console.error('Error storing admin password in app_config:', persistErr);
+                return;
+              }
+              console.log(`Admin credentials: ${ADMIN_USERNAME} / ${password}`);
+            }
+          );
+        };
+
+        if (!adminTeam) {
+          const generatedPassword = generateSecurePassword();
+          const hashedPassword = bcrypt.hashSync(generatedPassword, 10);
+
+          db!.run(
+            `INSERT INTO teams (name, email, password, is_admin, score, member_count)
+             VALUES (?, ?, ?, 1, 0, 0)`,
+            [ADMIN_USERNAME, ADMIN_EMAIL, hashedPassword],
+            (insertAdminErr) => {
+              if (insertAdminErr) {
+                console.error('Error creating admin account:', insertAdminErr);
+                return;
+              }
+              console.log('Generated secure admin password for first run.');
+              persistAndPrintAdminPassword(generatedPassword);
+            }
+          );
+          return;
+        }
+
+        db!.get<{ value: string }>(
+          'SELECT value FROM app_config WHERE key = ?',
+          [ADMIN_PASSWORD_CONFIG_KEY],
+          (configErr, existingPasswordConfig) => {
+            if (configErr) {
+              console.error('Error reading stored admin password from app_config:', configErr);
+              return;
+            }
+
+            if (existingPasswordConfig?.value) {
+              console.log(`Admin credentials: ${ADMIN_USERNAME} / ${existingPasswordConfig.value}`);
+              return;
+            }
+
+            const rotatedPassword = generateSecurePassword();
+            const rotatedHash = bcrypt.hashSync(rotatedPassword, 10);
+
+            db!.run('UPDATE teams SET password = ? WHERE id = ?', [rotatedHash, adminTeam.id], (updateErr) => {
+              if (updateErr) {
+                console.error('Error rotating admin password for existing database:', updateErr);
+                return;
+              }
+              console.log('Generated secure admin password and synced existing admin account.');
+              persistAndPrintAdminPassword(rotatedPassword);
+            });
+          }
+        );
+      }
     );
 
     db!.run(

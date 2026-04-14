@@ -7,7 +7,7 @@ A full-stack CTF platform with real-time scoring, admin controls, timer-based co
 - **Auth route/UI:** `/auth` (with `/login` redirect compatibility)
 - **Credentials:** username + password only (no email in UI)
 - **Team member model:** up to **6 members** can join the same team using the same team name/password
-- **Admin account:** `admin / admin123` (or `ADMIN_PASSWORD` if set)
+- **Admin account:** `admin` with a secure random password generated on first run and printed in backend logs (stored in DB for later startup log display)
 - **Dashboard navigation:** top tabs (Ranking, Scoreboard, Live Activity, Challenges)
 - **Challenges UX:** click challenge card -> submit flag modal + confetti on correct flag
 - **Live updates:** scoreboard/activity via Socket.IO
@@ -124,7 +124,6 @@ services:
       - PORT=3001
       - HOST=0.0.0.0
       - JWT_SECRET=change-me
-      - ADMIN_PASSWORD=admin123
       - FRONTEND_URL=http://localhost:3000
     volumes:
       - ./backend/ctf.db:/app/ctf.db
@@ -150,6 +149,7 @@ Then open:
 
 - Frontend: `http://localhost:3000`
 - Backend health: `http://localhost:3001/api/health`
+- Admin credentials: check backend startup logs (`Admin credentials: admin / <generated-password>`)
 
 ## Main API routes
 

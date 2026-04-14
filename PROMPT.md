@@ -42,7 +42,7 @@ Build a polished CTF web app with:
 - Auth page route is **`/auth`**.
 - `/login` should redirect to `/auth`.
 - Login and registration use **username + password only** (no email fields in UI).
-- Admin credentials use username/password (`admin` + configured password).
+- Admin credentials use username/password (`admin` + secure random password generated on first run and printed in backend logs).
 - After login, admin users should land on **`/admin/challenges`** by default.
 - Team registration can join existing team if username+password match.
 - A team has a max of **6 members**.

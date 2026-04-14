@@ -7,8 +7,7 @@ services:
     environment:
       PORT: 3001
       HOST: 0.0.0.0
-      JWT_SECRET: change-me
-      ADMIN_PASSWORD: admin123
+      JWT_SECRET: ${JWT_SECRET:-change-me}
       FRONTEND_URL: http://localhost:3000
     volumes:
       - ./backend/ctf.db:/app/ctf.db
@@ -17,7 +16,7 @@ services:
     build:
       context: ./frontend
       args:
-        VITE_API_URL: http://localhost:3001/api
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:3001/api}
     ports:
       - "3000:80"
     depends_on:

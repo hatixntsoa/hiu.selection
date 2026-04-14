@@ -5,7 +5,7 @@ import { Server } from 'socket.io';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 
-import { closeDatabase } from './models/database';
+import { closeDatabase, getDatabase } from './models/database';
 import authRoutes from './routes/auth.routes';
 import challengeRoutes from './routes/challenge.routes';
 import { router as flagRoutes, setIO } from './routes/flag.routes';
@@ -61,10 +61,11 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 const PORT = Number(process.env.PORT) || 3001;
 const HOST = process.env.HOST || '0.0.0.0';
 
+getDatabase();
+
 server.listen(PORT, HOST, () => {
   console.log(`CTF Platform backend running on http://${HOST}:${PORT}`);
   console.log('Database: ctf.db');
-  console.log(`Admin credentials: admin / ${process.env.ADMIN_PASSWORD || 'admin123'}`);
 });
 
 process.on('SIGINT', () => {

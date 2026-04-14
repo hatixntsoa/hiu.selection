@@ -27,18 +27,19 @@ npm run dev
 - **Backend API:** http://localhost:3001
 - **API Health Check:** http://localhost:3001/api/health
 
-## 🔐 Default Admin Login
+## 🔐 Admin Login
 
-- **Email:** `admin@ctf.local`
-- **Password:** `admin123`
+- **Username:** `admin`
+- **Password:** generated on first backend start
+- Check backend logs for: `Admin credentials: admin / <generated-password>`
 
 ## 🎮 How to Use
 
 1. **Register a Team:**
    - Go to http://localhost:3000
-   - Click "Login" or "Get Started"
+   - Click "Login to Play" or "Register Team"
    - Switch to "Register" tab
-   - Enter team name, email, and password
+   - Enter team name and password
    - Click "Register"
 
 2. **Browse Challenges:**
@@ -82,12 +83,12 @@ curl http://localhost:3001/api/challenges
 # Register a team
 curl -X POST http://localhost:3001/api/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"name":"MyTeam","email":"my@ctf.local","password":"password123"}'
+  -d '{"name":"MyTeam","password":"password123"}'
 
 # Login
 curl -X POST http://localhost:3001/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"my@ctf.local","password":"password123"}'
+  -d '{"name":"MyTeam","password":"password123"}'
 
 # Submit a flag (use token from login)
 curl -X POST http://localhost:3001/api/flags/submit \
