@@ -22,6 +22,20 @@ function emitRealtimeUpdates(req: Request): void {
   io?.emit('scoreboard_update');
 }
 
+function syncTeamMemberCount(db: sqlite3.Database, teamId: number, callback: (err: Error | null) => void): void {
+  db.run(
+    `UPDATE teams
+     SET member_count = (
+       SELECT COUNT(*)
+       FROM team_members tm
+       WHERE tm.team_id = teams.id AND tm.is_primary = 0
+     )
+     WHERE id = ?`,
+    [teamId],
+    (err) => callback(err)
+  );
+}
+
 function teamPayload(team: TeamRow): { id: number; name: string; score: number; isAdmin: boolean; memberCount: number } {
   return {
     id: team.id,
@@ -58,7 +72,7 @@ export function register(req: Request, res: Response): Response | void {
 
     const hashedPassword = bcrypt.hashSync(password, 10);
     db.run(
-      'INSERT INTO teams (name, email, password, member_count) VALUES (?, ?, ?, 1)',
+      'INSERT INTO teams (name, email, password, member_count) VALUES (?, ?, ?, 0)',
       [trimmedName, syntheticEmail, hashedPassword],
       function (this: sqlite3.RunResult, err: Error | null) {
         if (err) {
@@ -69,7 +83,7 @@ export function register(req: Request, res: Response): Response | void {
         }
 
         const teamId = this.lastID;
-        db.run('INSERT INTO team_members (team_id, username) VALUES (?, ?)', [teamId, trimmedName], (memberErr) => {
+        db.run('INSERT INTO team_members (team_id, username, is_primary) VALUES (?, ?, 1)', [teamId, trimmedName], (memberErr) => {
           if (memberErr) {
             return res.status(500).json({ error: 'Registration failed' });
           }
@@ -85,7 +99,7 @@ export function register(req: Request, res: Response): Response | void {
               name: trimmedName,
               score: 0,
               isAdmin: false,
-              memberCount: 1
+              memberCount: 0
             }
           });
         });
@@ -208,15 +222,31 @@ export function updateTeam(req: Request, res: Response): Response | void {
               return res.status(500).json({ error: 'Database error' });
             }
 
-            db.get<TeamRow>(
-              'SELECT id, name, email, score, member_count, is_admin, created_at FROM teams WHERE id = ?',
-              [userId],
-              (freshErr, freshTeam) => {
-                if (freshErr || !freshTeam) {
+            db.run(
+              'UPDATE team_members SET username = ? WHERE team_id = ? AND is_primary = 1',
+              [trimmedName, userId],
+              (primaryErr) => {
+                if (primaryErr) {
                   return res.status(500).json({ error: 'Database error' });
                 }
-                emitRealtimeUpdates(req);
-                return res.json({ message: 'Team updated', team: teamPayload(freshTeam) });
+
+                syncTeamMemberCount(db, userId, (syncErr) => {
+                  if (syncErr) {
+                    return res.status(500).json({ error: 'Database error' });
+                  }
+
+                  db.get<TeamRow>(
+                    'SELECT id, name, email, score, member_count, is_admin, created_at FROM teams WHERE id = ?',
+                    [userId],
+                    (freshErr, freshTeam) => {
+                      if (freshErr || !freshTeam) {
+                        return res.status(500).json({ error: 'Database error' });
+                      }
+                      emitRealtimeUpdates(req);
+                      return res.json({ message: 'Team updated', team: teamPayload(freshTeam) });
+                    }
+                  );
+                });
               }
             );
           });
@@ -233,13 +263,14 @@ export function listTeamMembers(req: Request, res: Response): Response | void {
   }
   const db = getDatabase();
   db.all<TeamMemberRow>(
-    'SELECT id, team_id, username, created_at FROM team_members WHERE team_id = ? ORDER BY created_at ASC, id ASC',
+    'SELECT id, team_id, username, is_primary, created_at FROM team_members WHERE team_id = ? ORDER BY is_primary DESC, created_at ASC, id ASC',
     [userId],
     (err, members) => {
       if (err) {
         return res.status(500).json({ error: 'Database error' });
       }
-      return res.json({ members, memberCount: members.length, maxMembers: MAX_TEAM_MEMBERS });
+      const memberCount = members.filter((member) => member.is_primary !== 1).length;
+      return res.json({ members, memberCount, maxMembers: MAX_TEAM_MEMBERS });
     }
   );
 }
@@ -258,7 +289,10 @@ export function addTeamMember(req: Request, res: Response): Response | void {
   const db = getDatabase();
   const trimmedUsername = username.trim();
 
-  db.get<{ total: number }>('SELECT COUNT(*) as total FROM team_members WHERE team_id = ?', [userId], (countErr, countRow) => {
+  db.get<{ total: number }>(
+    'SELECT COUNT(*) as total FROM team_members WHERE team_id = ? AND is_primary = 0',
+    [userId],
+    (countErr, countRow) => {
     if (countErr) {
       return res.status(500).json({ error: 'Database error' });
     }
@@ -282,25 +316,119 @@ export function addTeamMember(req: Request, res: Response): Response | void {
           return res.status(400).json({ error: 'Username already exists' });
         }
 
-        db.run('INSERT INTO team_members (team_id, username) VALUES (?, ?)', [userId, trimmedUsername], (insertErr) => {
+        db.run('INSERT INTO team_members (team_id, username, is_primary) VALUES (?, ?, 0)', [userId, trimmedUsername], (insertErr) => {
           if (insertErr) {
             return res.status(500).json({ error: 'Database error' });
           }
 
-          db.run(
-            `UPDATE teams
-             SET member_count = (SELECT COUNT(*) FROM team_members WHERE team_id = ?)
-             WHERE id = ?`,
-            [userId, userId],
-            (syncErr) => {
-              if (syncErr) {
-                return res.status(500).json({ error: 'Database error' });
-              }
-              emitRealtimeUpdates(req);
-              return res.status(201).json({ message: 'Member added' });
+          syncTeamMemberCount(db, userId, (syncErr) => {
+            if (syncErr) {
+              return res.status(500).json({ error: 'Database error' });
             }
-          );
+            emitRealtimeUpdates(req);
+            return res.status(201).json({ message: 'Member added' });
+          });
         });
+      });
+    });
+  });
+}
+
+export function updateTeamMember(req: Request, res: Response): Response | void {
+  const userId = req.user?.id;
+  const memberId = Number(req.params.memberId);
+  const { username } = req.body as { username?: string };
+
+  if (!userId) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+  if (!Number.isInteger(memberId) || memberId <= 0) {
+    return res.status(400).json({ error: 'Team not found' });
+  }
+  if (!username || !username.trim()) {
+    return res.status(400).json({ error: 'Username and password are required' });
+  }
+
+  const db = getDatabase();
+  const trimmedUsername = username.trim();
+
+  db.get<TeamMemberRow>('SELECT * FROM team_members WHERE id = ? AND team_id = ?', [memberId, userId], (memberLookupErr, member) => {
+    if (memberLookupErr) {
+      return res.status(500).json({ error: 'Database error' });
+    }
+    if (!member) {
+      return res.status(404).json({ error: 'Team not found' });
+    }
+    if (member.is_primary === 1) {
+      return res.status(400).json({ error: 'Team name member cannot be edited here' });
+    }
+
+    db.get<{ id: number }>('SELECT id FROM teams WHERE name = ? COLLATE NOCASE', [trimmedUsername], (teamNameErr, teamNameClash) => {
+      if (teamNameErr) {
+        return res.status(500).json({ error: 'Database error' });
+      }
+      if (teamNameClash) {
+        return res.status(400).json({ error: 'Username already exists' });
+      }
+
+      db.get<{ id: number }>(
+        'SELECT id FROM team_members WHERE username = ? COLLATE NOCASE AND id != ?',
+        [trimmedUsername, memberId],
+        (memberErr, memberClash) => {
+          if (memberErr) {
+            return res.status(500).json({ error: 'Database error' });
+          }
+          if (memberClash) {
+            return res.status(400).json({ error: 'Username already exists' });
+          }
+
+          db.run('UPDATE team_members SET username = ? WHERE id = ? AND team_id = ?', [trimmedUsername, memberId, userId], (updateErr) => {
+            if (updateErr) {
+              return res.status(500).json({ error: 'Database error' });
+            }
+            emitRealtimeUpdates(req);
+            return res.json({ message: 'Member updated' });
+          });
+        }
+      );
+    });
+  });
+}
+
+export function deleteTeamMember(req: Request, res: Response): Response | void {
+  const userId = req.user?.id;
+  const memberId = Number(req.params.memberId);
+
+  if (!userId) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+  if (!Number.isInteger(memberId) || memberId <= 0) {
+    return res.status(400).json({ error: 'Team not found' });
+  }
+
+  const db = getDatabase();
+  db.get<TeamMemberRow>('SELECT * FROM team_members WHERE id = ? AND team_id = ?', [memberId, userId], (memberLookupErr, member) => {
+    if (memberLookupErr) {
+      return res.status(500).json({ error: 'Database error' });
+    }
+    if (!member) {
+      return res.status(404).json({ error: 'Team not found' });
+    }
+    if (member.is_primary === 1) {
+      return res.status(400).json({ error: 'Team name member cannot be deleted' });
+    }
+
+    db.run('DELETE FROM team_members WHERE id = ? AND team_id = ?', [memberId, userId], (deleteErr) => {
+      if (deleteErr) {
+        return res.status(500).json({ error: 'Database error' });
+      }
+
+      syncTeamMemberCount(db, userId, (syncErr) => {
+        if (syncErr) {
+          return res.status(500).json({ error: 'Database error' });
+        }
+        emitRealtimeUpdates(req);
+        return res.json({ message: 'Member deleted' });
       });
     });
   });

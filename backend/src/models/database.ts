@@ -56,10 +56,17 @@ function initializeDatabase(): void {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         team_id INTEGER NOT NULL,
         username TEXT UNIQUE COLLATE NOCASE NOT NULL,
+        is_primary INTEGER NOT NULL DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (team_id) REFERENCES teams(id)
       )
     `);
+
+    db!.run('ALTER TABLE team_members ADD COLUMN is_primary INTEGER NOT NULL DEFAULT 0', (alterErr) => {
+      if (alterErr && !alterErr.message.includes('duplicate column name')) {
+        console.error('Error ensuring team_members.is_primary:', alterErr);
+      }
+    });
 
     db!.run(`
       CREATE TABLE IF NOT EXISTS categories (
@@ -118,17 +125,39 @@ function initializeDatabase(): void {
     );
 
     db!.run(
-      `INSERT OR IGNORE INTO team_members (team_id, username)
-       SELECT t.id, t.name
+      `INSERT OR IGNORE INTO team_members (team_id, username, is_primary)
+        SELECT t.id, t.name, 1
+        FROM teams t
+        LEFT JOIN team_members tm ON tm.team_id = t.id
+        WHERE tm.id IS NULL`,
+      (missingErr) => {
+        if (missingErr) {
+          console.error('Error ensuring default team members:', missingErr);
+        }
+      }
+    );
+
+    db!.run(
+      `UPDATE team_members
+       SET is_primary = CASE
+         WHEN LOWER(username) = LOWER((SELECT name FROM teams WHERE id = team_members.team_id)) THEN 1
+         ELSE 0
+       END`
+    );
+
+    db!.run(
+      `INSERT INTO team_members (team_id, username, is_primary)
+       SELECT t.id, t.name, 1
        FROM teams t
-       LEFT JOIN team_members tm ON tm.team_id = t.id
-       WHERE tm.id IS NULL`
+       WHERE NOT EXISTS (
+         SELECT 1 FROM team_members tm WHERE tm.team_id = t.id AND tm.is_primary = 1
+       )`
     );
 
     db!.run(
       `UPDATE teams
        SET member_count = (
-         SELECT COUNT(*) FROM team_members tm WHERE tm.team_id = teams.id
+         SELECT COUNT(*) FROM team_members tm WHERE tm.team_id = teams.id AND tm.is_primary = 0
        )`
     );
 

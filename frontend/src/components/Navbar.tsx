@@ -29,8 +29,11 @@ function Navbar(): JSX.Element {
   const [showTeamModal, setShowTeamModal] = useState(false);
   const [teamName, setTeamName] = useState('');
   const [members, setMembers] = useState<TeamMember[]>([]);
+  const [memberCount, setMemberCount] = useState(0);
   const [maxMembers, setMaxMembers] = useState(6);
   const [newMemberUsername, setNewMemberUsername] = useState('');
+  const [editingMemberId, setEditingMemberId] = useState<number | null>(null);
+  const [editingMemberUsername, setEditingMemberUsername] = useState('');
   const [teamError, setTeamError] = useState('');
   const [teamSuccess, setTeamSuccess] = useState('');
   const location = useLocation();
@@ -69,8 +72,10 @@ function Navbar(): JSX.Element {
     const response = await api.get('/auth/team/members');
     const nextMembers = response.data.members as TeamMember[];
     setMembers(nextMembers);
+    const nextMemberCount = Number(response.data.memberCount) || nextMembers.filter((member) => member.is_primary !== 1).length;
+    setMemberCount(nextMemberCount);
     setMaxMembers(Number(response.data.maxMembers) || 6);
-    updateUser({ memberCount: nextMembers.length });
+    updateUser({ memberCount: nextMemberCount });
   };
 
   const openTeamModal = (): void => {
@@ -80,6 +85,8 @@ function Navbar(): JSX.Element {
     setShowTeamModal(true);
     setTeamName(user.name);
     setNewMemberUsername('');
+    setEditingMemberId(null);
+    setEditingMemberUsername('');
     setTeamError('');
     setTeamSuccess('');
     void loadMembers().catch(() => undefined);
@@ -107,6 +114,55 @@ function Navbar(): JSX.Element {
       const response = await api.post('/auth/team/members', { username: newMemberUsername.trim() });
       setTeamSuccess(localizeApiMessage(response.data.message || 'Member added'));
       setNewMemberUsername('');
+      await loadMembers();
+    } catch (err: any) {
+      setTeamError(localizeApiMessage(err.response?.data?.error || t('apiDatabaseError')));
+    }
+  };
+
+  const beginEditMember = (member: TeamMember): void => {
+    if (member.is_primary === 1) {
+      return;
+    }
+    setEditingMemberId(member.id);
+    setEditingMemberUsername(member.username);
+    setTeamError('');
+    setTeamSuccess('');
+  };
+
+  const cancelEditMember = (): void => {
+    setEditingMemberId(null);
+    setEditingMemberUsername('');
+  };
+
+  const handleSaveMemberEdit = async (memberId: number): Promise<void> => {
+    setTeamError('');
+    setTeamSuccess('');
+    try {
+      const response = await api.put(`/auth/team/members/${memberId}`, { username: editingMemberUsername.trim() });
+      setTeamSuccess(localizeApiMessage(response.data.message || 'Member updated'));
+      cancelEditMember();
+      await loadMembers();
+    } catch (err: any) {
+      setTeamError(localizeApiMessage(err.response?.data?.error || t('apiDatabaseError')));
+    }
+  };
+
+  const handleDeleteMember = async (member: TeamMember): Promise<void> => {
+    if (member.is_primary === 1) {
+      return;
+    }
+    if (!window.confirm(t('teamProfileDeleteConfirm', { username: member.username }))) {
+      return;
+    }
+    setTeamError('');
+    setTeamSuccess('');
+    try {
+      const response = await api.delete(`/auth/team/members/${member.id}`);
+      setTeamSuccess(localizeApiMessage(response.data.message || 'Member deleted'));
+      if (editingMemberId === member.id) {
+        cancelEditMember();
+      }
       await loadMembers();
     } catch (err: any) {
       setTeamError(localizeApiMessage(err.response?.data?.error || t('apiDatabaseError')));
@@ -243,11 +299,70 @@ function Navbar(): JSX.Element {
           </Form>
 
           <h6 className="section-title mb-2">{t('teamProfileMembers')}</h6>
-          <p className="text-secondary small mb-2">{t('teamProfileMembersHint', { count: members.length, max: maxMembers })}</p>
+          <p className="text-secondary small mb-2">{t('teamProfileMembersHint', { count: memberCount, max: maxMembers })}</p>
           <div className="team-members-list mb-3">
             {members.map((member) => (
-              <div key={member.id} className="team-member-pill">
-                {member.username}
+              <div key={member.id} className="team-member-pill d-flex align-items-center gap-2">
+                {editingMemberId === member.id ? (
+                  <>
+                    <Form.Control
+                      size="sm"
+                      value={editingMemberUsername}
+                      onChange={(e) => setEditingMemberUsername(e.target.value)}
+                      className="team-member-edit-input"
+                    />
+                    <Button
+                      size="sm"
+                      variant="success"
+                      className="team-member-icon-btn"
+                      onClick={() => void handleSaveMemberEdit(member.id)}
+                      title={t('teamProfileSaveMember')}
+                      aria-label={t('teamProfileSaveMember')}
+                    >
+                      <span aria-hidden="true">✓</span>
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline-secondary"
+                      className="team-member-icon-btn"
+                      onClick={cancelEditMember}
+                      title={t('teamProfileCancel')}
+                      aria-label={t('teamProfileCancel')}
+                    >
+                      <span aria-hidden="true">✕</span>
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <span>{member.username}</span>
+                    {member.is_primary === 1 ? (
+                      <Badge bg="secondary">{t('teamProfileTeamNameTag')}</Badge>
+                    ) : (
+                      <div className="d-flex align-items-center gap-1">
+                        <Button
+                          size="sm"
+                          variant="outline-secondary"
+                          className="team-member-icon-btn"
+                          onClick={() => beginEditMember(member)}
+                          title={t('teamProfileEditMember')}
+                          aria-label={t('teamProfileEditMember')}
+                        >
+                          <span aria-hidden="true">✎</span>
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline-danger"
+                          className="team-member-icon-btn"
+                          onClick={() => void handleDeleteMember(member)}
+                          title={t('teamProfileDeleteMember')}
+                          aria-label={t('teamProfileDeleteMember')}
+                        >
+                          <span aria-hidden="true">🗑</span>
+                        </Button>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             ))}
           </div>
@@ -259,10 +374,10 @@ function Navbar(): JSX.Element {
                 value={newMemberUsername}
                 onChange={(e) => setNewMemberUsername(e.target.value)}
                 placeholder={t('teamProfileUsernamePlaceholder')}
-                disabled={members.length >= maxMembers}
+                disabled={memberCount >= maxMembers}
                 required
               />
-              <Button type="submit" variant="success" disabled={members.length >= maxMembers}>
+              <Button type="submit" variant="success" disabled={memberCount >= maxMembers}>
                 +
               </Button>
             </div>

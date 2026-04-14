@@ -21,6 +21,9 @@
   --warm-danger: #cf222e;
   --warm-grid-line: rgba(27, 31, 36, 0.08);
   --warm-grid-glow: rgba(9, 105, 218, 0.07);
+  --scroll-bg: #edf2f7;
+  --scroll-handle: #c1c9d2;
+  --handle-hover: #aab4c0;
 }
 
 :root[data-theme='dark'] {
@@ -42,10 +45,34 @@
   --warm-danger: #f85149;
   --warm-grid-line: rgba(240, 246, 252, 0.08);
   --warm-grid-glow: rgba(47, 129, 247, 0.12);
+  --scroll-bg: #11161d;
+  --scroll-handle: #30363d;
+  --handle-hover: #484f58;
 }
 
 * {
   box-sizing: border-box;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--scroll-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scroll-handle);
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--handle-hover);
+}
+
+* {
+  scrollbar-color: var(--scroll-handle) var(--scroll-bg);
 }
 
 :root[data-font='claude'] {
@@ -617,6 +644,21 @@ h6,
   font-size: 0.9rem;
 }
 
+.team-member-edit-input {
+  min-width: 180px;
+}
+
+.team-member-icon-btn {
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
 .activity-item {
   border-bottom: 1px solid color-mix(in srgb, var(--warm-border) 80%, transparent) !important;
 }
@@ -635,6 +677,13 @@ h6,
   background: var(--warm-surface);
   border: 1px solid var(--warm-border);
   color: var(--warm-text);
+}
+
+.modal-backdrop.show {
+  --bs-backdrop-opacity: 0.94;
+  backdrop-filter: blur(56px) saturate(90%);
+  -webkit-backdrop-filter: blur(56px) saturate(90%);
+  background-color: color-mix(in srgb, var(--warm-bg) 92%, transparent);
 }
 
 .modal-header,

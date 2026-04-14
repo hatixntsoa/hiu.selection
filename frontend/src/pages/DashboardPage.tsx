@@ -32,8 +32,8 @@ async function celebrateSolve(): Promise<void> {
 
   const fire = confetti.create(canvas, { resize: true, useWorker: true });
   const startedAt = Date.now();
-  const totalDuration = 2000;
-  const streamEndTime = startedAt + 850;
+  const totalDuration = 6800;
+  const streamEndTime = startedAt + 1900;
 
   fire({
     particleCount: 220,
@@ -212,26 +212,12 @@ function DashboardPage(): JSX.Element {
   const activeSolved = activeChallenge ? solvedChallenges.has(activeChallenge.id) : false;
   const challengesDisabled = Boolean(timer && !timer.canSubmit);
   const challengeDisabledMessage = timer && !timer.isActive ? t('dashboardChallengesNotStarted') : t('dashboardChallengesClosed');
-  const timerLabel = timer?.isInfinite
-    ? t('timerInfinite')
-    : timer && !timer.isActive
-      ? t('timerNotStarted')
-    : typeof timer?.timeLeftSeconds === 'number'
-      ? new Date(timer.timeLeftSeconds * 1000).toISOString().substring(11, 19)
-      : t('timerFinished');
-
   return (
     <Container fluid>
       <Row className="mb-4">
         <Col>
           <h2 className="section-title">{t('dashboardTitle')}</h2>
           <p className="text-secondary">{t('dashboardWelcomeBack', { name: user?.name || '' })}</p>
-        </Col>
-        <Col lg="auto" className="d-flex align-items-center">
-          <Card className="soft-card px-3 py-2">
-            <small className="text-secondary d-block">{t('timerLabel')}</small>
-            <strong className={challengesDisabled ? 'text-danger' : 'text-success'}>{timerLabel}</strong>
-          </Card>
         </Col>
       </Row>
 

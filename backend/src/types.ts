@@ -19,6 +19,7 @@ export interface TeamMemberRow {
   id: number;
   team_id: number;
   username: string;
+  is_primary: number;
   created_at: string;
 }
 
