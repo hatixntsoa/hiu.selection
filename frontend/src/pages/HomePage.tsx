@@ -1,4 +1,4 @@
-import { CSSProperties, useEffect } from 'react';
+import { CSSProperties, useEffect, useState } from 'react';
 import { Card, Col, Container, Row } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -7,8 +7,31 @@ import { usePreferences } from '../context/PreferencesContext';
 function HomePage(): JSX.Element {
   const { user } = useAuth();
   const { t } = usePreferences();
+  const [showInitialSkeleton, setShowInitialSkeleton] = useState<boolean>(() => {
+    if (typeof window === 'undefined') {
+      return false;
+    }
+    return localStorage.getItem('home-skeleton-shown') !== 'true';
+  });
 
   useEffect(() => {
+    if (!showInitialSkeleton) {
+      return undefined;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setShowInitialSkeleton(false);
+      localStorage.setItem('home-skeleton-shown', 'true');
+    }, 950);
+
+    return () => window.clearTimeout(timeout);
+  }, [showInitialSkeleton]);
+
+  useEffect(() => {
+    if (showInitialSkeleton) {
+      return undefined;
+    }
+
     const items = Array.from(document.querySelectorAll<HTMLElement>('.home-reveal'));
     const observer = new IntersectionObserver(
       (entries) => {
@@ -22,7 +45,7 @@ function HomePage(): JSX.Element {
     );
     items.forEach((item) => observer.observe(item));
     return () => observer.disconnect();
-  }, []);
+  }, [showInitialSkeleton]);
 
   const topCards = [
     { title: t('homeCaptureFlagsTitle'), desc: t('homeCaptureFlagsDesc'), color: 'text-primary', icon: '⌁' },
@@ -47,6 +70,40 @@ function HomePage(): JSX.Element {
     { title: t('homeExtraSpectatorTitle'), desc: t('homeExtraSpectatorDesc'), icon: '⬒' },
     { title: t('homeExtraTeamOpsTitle'), desc: t('homeExtraTeamOpsDesc'), icon: '◫' }
   ];
+
+  if (showInitialSkeleton) {
+    return (
+      <div className="home-page home-skeleton-page" aria-busy="true" aria-live="polite">
+        <section className="home-hero">
+          <div className="home-hero-inner">
+            <div className="skeleton-line home-skeleton-title" />
+            <div className="skeleton-line home-skeleton-intro" />
+            <div className="skeleton-line home-skeleton-intro short" />
+            <div className="home-skeleton-actions">
+              <div className="skeleton-pill" />
+              <div className="skeleton-pill" />
+            </div>
+          </div>
+        </section>
+        <Container className="home-content">
+          <Row className="home-cards-grid mt-2">
+            {Array.from({ length: 3 }).map((_, index) => (
+              <Col key={`skeleton-top-${index}`} md={4}>
+                <Card className="h-100 soft-card home-info-card">
+                  <Card.Body>
+                    <div className="skeleton-circle" />
+                    <div className="skeleton-line medium" />
+                    <div className="skeleton-line" />
+                    <div className="skeleton-line short" />
+                  </Card.Body>
+                </Card>
+              </Col>
+            ))}
+          </Row>
+        </Container>
+      </div>
+    );
+  }
 
   return (
     <div className="home-page">

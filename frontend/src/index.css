@@ -270,6 +270,90 @@ body::before {
   background: color-mix(in srgb, var(--warm-primary) 8%, transparent);
 }
 
+.home-skeleton-page .soft-card {
+  box-shadow: none;
+}
+
+.skeleton-line,
+.skeleton-pill,
+.skeleton-circle {
+  position: relative;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--warm-border) 72%, var(--warm-surface));
+}
+
+.skeleton-line::after,
+.skeleton-pill::after,
+.skeleton-circle::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--warm-bg-accent) 45%, transparent) 50%,
+    transparent 100%
+  );
+  animation: skeleton-shimmer 1.25s ease-in-out infinite;
+}
+
+.skeleton-line {
+  height: 14px;
+  border-radius: 999px;
+  margin-bottom: 0.7rem;
+}
+
+.skeleton-line.short {
+  width: 68%;
+}
+
+.skeleton-line.medium {
+  width: 78%;
+}
+
+.home-skeleton-title {
+  height: clamp(2.6rem, 5.2vw, 4.25rem);
+  width: min(660px, 90%);
+  margin: 0 auto 1rem;
+}
+
+.home-skeleton-intro {
+  height: 18px;
+  width: min(760px, 92%);
+  margin: 0.45rem auto;
+}
+
+.home-skeleton-intro.short {
+  width: min(540px, 76%);
+  margin-bottom: 1.6rem;
+}
+
+.home-skeleton-actions {
+  display: flex;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.skeleton-pill {
+  height: 48px;
+  width: 170px;
+  border-radius: 12px;
+}
+
+.skeleton-circle {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  margin-bottom: 0.75rem;
+}
+
+@keyframes skeleton-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
 .home-reveal {
   opacity: 0;
   transform: translateY(18px);
