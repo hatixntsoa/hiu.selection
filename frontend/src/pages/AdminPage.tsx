@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Button, Card, Col, Container, Modal, Row, Table } from 'react-bootstrap';
+import { Alert, Button, Card, Container, Modal, Table } from 'react-bootstrap';
 import { useParams } from 'react-router-dom';
 import api from '../services/api';
 import ChallengeManager from '../components/Admin/ChallengeManager';
@@ -96,13 +96,6 @@ function AdminPage(): JSX.Element {
 
   return (
     <Container fluid>
-      <Row className="mb-4">
-        <Col>
-          <h2 className="section-title">{t('adminTitle')}</h2>
-          <p className="text-secondary">{t('adminSubtitle')}</p>
-        </Col>
-      </Row>
-
       {isLiveScoreboardRoute ? (
         <Card className="mt-2 soft-card live-scoreboard-screen" ref={liveScoreboardRef}>
           <Card.Header className="d-flex justify-content-between align-items-center">

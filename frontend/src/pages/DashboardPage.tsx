@@ -214,13 +214,6 @@ function DashboardPage(): JSX.Element {
   const challengeDisabledMessage = timer && !timer.isActive ? t('dashboardChallengesNotStarted') : t('dashboardChallengesClosed');
   return (
     <Container fluid>
-      <Row className="mb-4">
-        <Col>
-          <h2 className="section-title">{t('dashboardTitle')}</h2>
-          <p className="text-secondary">{t('dashboardWelcomeBack', { name: user?.name || '' })}</p>
-        </Col>
-      </Row>
-
       {currentSection === 'ranking' && (
         <Row className="g-4 mt-1">
           <Col md={3}>
