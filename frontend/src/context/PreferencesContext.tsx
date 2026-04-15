@@ -1,4 +1,4 @@
-import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, ReactNode, useContext, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { Language, translations, TranslationKey } from '../i18n/translations';
 
 export type ThemeMode = 'system' | 'light' | 'dark';
@@ -93,13 +93,23 @@ function resolveTheme(mode: ThemeMode, systemDark: boolean): ResolvedTheme {
   return mode;
 }
 
+function getSystemDarkPreference(): boolean {
+  return typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+    ? window.matchMedia('(prefers-color-scheme: dark)').matches
+    : false;
+}
+
 export function PreferencesProvider({ children }: { children: ReactNode }): JSX.Element {
   const [themeMode, setThemeModeState] = useState<ThemeMode>(getInitialThemeMode);
   const [language, setLanguageState] = useState<Language>(getInitialLanguage);
   const [fontFamily] = useState<FontFamilyMode>(getInitialFontFamily);
-  const [systemDark, setSystemDark] = useState<boolean>(() => window.matchMedia('(prefers-color-scheme: dark)').matches);
+  const [systemDark, setSystemDark] = useState<boolean>(getSystemDarkPreference);
 
   useEffect(() => {
+    if (typeof window.matchMedia !== 'function') {
+      return undefined;
+    }
+
     const media = window.matchMedia('(prefers-color-scheme: dark)');
     const handleChange = (event: MediaQueryListEvent): void => setSystemDark(event.matches);
     media.addEventListener('change', handleChange);
@@ -108,7 +118,7 @@ export function PreferencesProvider({ children }: { children: ReactNode }): JSX.
 
   const resolvedTheme = useMemo(() => resolveTheme(themeMode, systemDark), [themeMode, systemDark]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     document.documentElement.setAttribute('data-theme', resolvedTheme);
     localStorage.setItem(THEME_STORAGE_KEY, themeMode);
   }, [themeMode, resolvedTheme]);
