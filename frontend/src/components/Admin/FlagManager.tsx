@@ -1,17 +1,42 @@
 import { ChangeEvent, DragEvent, FormEvent, useEffect, useMemo, useState } from 'react';
 import { Alert, Button, Form, Modal, Table } from 'react-bootstrap';
 import api from '../../services/api';
-import { Challenge } from '../../types';
+import { Challenge, Difficulty } from '../../types';
 import { usePreferences } from '../../context/PreferencesContext';
 
 type FlagForm = {
   title: string;
   description: string;
   flag: string;
+  difficulty: Difficulty;
   first_blood_points: string;
   second_blood_points: string;
   default_points: string;
 };
+
+const DIFFICULTY_DEFAULT_POINTS: Record<Difficulty, { first: number; second: number; third: number }> = {
+  easy: { first: 100, second: 75, third: 50 },
+  medium: { first: 200, second: 150, third: 100 },
+  hard: { first: 300, second: 225, third: 150 }
+};
+
+function normalizeDifficulty(value: unknown): Difficulty {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (normalized === 'easy' || normalized === 'medium' || normalized === 'hard') {
+    return normalized;
+  }
+  return 'easy';
+}
+
+function difficultyLabelKey(difficulty: Difficulty): 'difficultyEasy' | 'difficultyMedium' | 'difficultyHard' {
+  if (difficulty === 'medium') {
+    return 'difficultyMedium';
+  }
+  if (difficulty === 'hard') {
+    return 'difficultyHard';
+  }
+  return 'difficultyEasy';
+}
 
 function parseTxtFlags(content: string): string[] {
   return content
@@ -31,6 +56,7 @@ function FlagManager({ onFlagChange }: { onFlagChange?: () => void }): JSX.Eleme
     title: '',
     description: '',
     flag: '',
+    difficulty: 'easy',
     first_blood_points: '100',
     second_blood_points: '75',
     default_points: '50'
@@ -64,6 +90,7 @@ function FlagManager({ onFlagChange }: { onFlagChange?: () => void }): JSX.Eleme
         title: flagItem.title || '',
         description: flagItem.description || '',
         flag: flagItem.flag || '',
+        difficulty: normalizeDifficulty(flagItem.difficulty),
         first_blood_points: String(flagItem.first_blood_points || 100),
         second_blood_points: String(flagItem.second_blood_points || 75),
         default_points: String(flagItem.default_points || 50)
@@ -74,6 +101,7 @@ function FlagManager({ onFlagChange }: { onFlagChange?: () => void }): JSX.Eleme
         title: '',
         description: '',
         flag: '',
+        difficulty: 'easy',
         first_blood_points: '100',
         second_blood_points: '75',
         default_points: '50'
@@ -93,6 +121,7 @@ function FlagManager({ onFlagChange }: { onFlagChange?: () => void }): JSX.Eleme
         title: formData.title.trim(),
         description: formData.description.trim(),
         flag: formData.flag.trim(),
+        difficulty: formData.difficulty,
         first_blood_points: Number(formData.first_blood_points || 100),
         second_blood_points: Number(formData.second_blood_points || 75),
         default_points: Number(formData.default_points || 50)
@@ -201,9 +230,8 @@ function FlagManager({ onFlagChange }: { onFlagChange?: () => void }): JSX.Eleme
             <th>{t('managerFieldTitle')}</th>
             <th>{t('managerFieldDescription')}</th>
             <th>{t('managerTableFlag')}</th>
-            <th>100</th>
-            <th>75</th>
-            <th>50</th>
+            <th>{t('managerTableDifficulty')}</th>
+            <th>{t('managerTablePoints')}</th>
             <th>{t('managerTableActions')}</th>
           </tr>
         </thead>
@@ -214,9 +242,8 @@ function FlagManager({ onFlagChange }: { onFlagChange?: () => void }): JSX.Eleme
               <td>{item.title || '-'}</td>
               <td>{item.description || '-'}</td>
               <td><code>{item.flag}</code></td>
-              <td>{item.first_blood_points || 100}</td>
-              <td>{item.second_blood_points || 75}</td>
-              <td>{item.default_points || 50}</td>
+              <td>{t(difficultyLabelKey(normalizeDifficulty(item.difficulty)))}</td>
+              <td>{`${item.first_blood_points || 100}|${item.second_blood_points || 75}|${item.default_points || 50}`}</td>
               <td>
                 <Button variant="success" size="sm" className="me-2" onClick={() => handleShowModal(item)}>
                   {t('managerEdit')}
@@ -268,6 +295,27 @@ function FlagManager({ onFlagChange }: { onFlagChange?: () => void }): JSX.Eleme
                 value={formData.flag}
                 onChange={(e) => setFormData((prev) => ({ ...prev, flag: e.target.value }))}
               />
+            </Form.Group>
+            <Form.Group className="mb-3">
+              <Form.Label>{t('managerTableDifficulty')}</Form.Label>
+              <Form.Select
+                value={formData.difficulty}
+                onChange={(e) => {
+                  const difficulty = normalizeDifficulty(e.target.value);
+                  const defaults = DIFFICULTY_DEFAULT_POINTS[difficulty];
+                  setFormData((prev) => ({
+                    ...prev,
+                    difficulty,
+                    first_blood_points: String(defaults.first),
+                    second_blood_points: String(defaults.second),
+                    default_points: String(defaults.third)
+                  }));
+                }}
+              >
+                <option value="easy">{t('difficultyEasy')}</option>
+                <option value="medium">{t('difficultyMedium')}</option>
+                <option value="hard">{t('difficultyHard')}</option>
+              </Form.Select>
             </Form.Group>
             <Form.Group className="mb-3">
               <Form.Label>{t('adminFlagsFirstBlood')}</Form.Label>

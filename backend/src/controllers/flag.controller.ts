@@ -3,12 +3,13 @@ import sqlite3 from 'sqlite3';
 import { Server } from 'socket.io';
 import { getDatabase } from '../models/database';
 import { getCtfTimerState } from '../models/timer';
-import { ChallengeRow } from '../types';
+import { ChallengeDifficulty, ChallengeRow } from '../types';
 
 type SubmissionRow = {
   id: number;
   challenge_id: number;
   challenge_public_id: string;
+  challenge_difficulty: ChallengeDifficulty | null;
   submitted_flag: string;
   awarded_points: number;
   is_correct: number;
@@ -100,6 +101,7 @@ export async function submitFlag(req: Request, res: Response, io?: Server): Prom
                   const activity = {
                     teamName: team?.name || 'Unknown',
                     points: awardedPoints,
+                    difficulty: challenge.difficulty || 'easy',
                     timestamp: new Date().toISOString()
                   };
                   io?.emit('flag_captured', activity);
@@ -109,7 +111,8 @@ export async function submitFlag(req: Request, res: Response, io?: Server): Prom
                 res.json({
                   correct: true,
                   message: 'Correct! Flag accepted.',
-                  points: awardedPoints
+                  points: awardedPoints,
+                  difficulty: challenge.difficulty || 'easy'
                 });
               }
             );
@@ -129,7 +132,7 @@ export function getSubmissionHistory(req: Request, res: Response): Response | vo
   const db = getDatabase();
 
   db.all<SubmissionRow>(
-    `SELECT s.id, s.challenge_id, c.public_id as challenge_public_id, s.submitted_flag, s.is_correct, s.awarded_points, s.submitted_at, c.title as challenge_title
+    `SELECT s.id, s.challenge_id, c.public_id as challenge_public_id, c.difficulty as challenge_difficulty, s.submitted_flag, s.is_correct, s.awarded_points, s.submitted_at, c.title as challenge_title
      FROM submissions s
      LEFT JOIN challenges c ON s.challenge_id = c.id
      WHERE s.team_id = ?

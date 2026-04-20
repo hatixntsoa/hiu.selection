@@ -10,9 +10,15 @@ const ADMIN_USERNAME = 'admin';
 const ADMIN_EMAIL = 'admin@ctf.local';
 const ADMIN_PASSWORD_CONFIG_KEY = 'admin_plain_password';
 const ADMIN_PASSWORD_LENGTH = 16;
-const DEFAULT_FIRST_BLOOD_POINTS = 100;
-const DEFAULT_SECOND_BLOOD_POINTS = 75;
-const DEFAULT_OTHER_POINTS = 50;
+const EASY_FIRST_BLOOD_POINTS = 100;
+const EASY_SECOND_BLOOD_POINTS = 75;
+const EASY_THIRD_BLOOD_POINTS = 50;
+const MEDIUM_FIRST_BLOOD_POINTS = 200;
+const MEDIUM_SECOND_BLOOD_POINTS = 150;
+const MEDIUM_THIRD_BLOOD_POINTS = 100;
+const HARD_FIRST_BLOOD_POINTS = 300;
+const HARD_SECOND_BLOOD_POINTS = 225;
+const HARD_THIRD_BLOOD_POINTS = 150;
 
 let db: sqlite3.Database | null = null;
 
@@ -110,6 +116,7 @@ function initializeDatabase(): void {
         public_id TEXT UNIQUE,
         title TEXT NOT NULL,
         description TEXT,
+        difficulty TEXT NOT NULL DEFAULT 'easy',
         first_blood_points INTEGER NOT NULL DEFAULT 100,
         second_blood_points INTEGER NOT NULL DEFAULT 75,
         default_points INTEGER NOT NULL DEFAULT 50,
@@ -154,6 +161,13 @@ function initializeDatabase(): void {
           errorLabel: 'Error adding challenges.first_blood_points'
         });
       }
+      const hasDifficulty = challengeColumns.some((column) => column.name === 'difficulty');
+      if (!hasDifficulty) {
+        migrationSteps.push({
+          sql: `ALTER TABLE challenges ADD COLUMN difficulty TEXT NOT NULL DEFAULT 'easy'`,
+          errorLabel: 'Error adding challenges.difficulty'
+        });
+      }
       const hasSecondBloodPoints = challengeColumns.some((column) => column.name === 'second_blood_points');
       if (!hasSecondBloodPoints) {
         migrationSteps.push({
@@ -184,9 +198,9 @@ function initializeDatabase(): void {
       sampleChallenges.forEach(([title, desc, flag]) => {
         migrationSteps.push({
           sql: `INSERT OR IGNORE INTO challenges (
-                  public_id, title, description, flag, first_blood_points, second_blood_points, default_points
-                ) VALUES (lower(hex(randomblob(3))), ?, ?, ?, ?, ?, ?)`,
-          params: [title, desc, flag, DEFAULT_FIRST_BLOOD_POINTS, DEFAULT_SECOND_BLOOD_POINTS, DEFAULT_OTHER_POINTS],
+                  public_id, title, description, flag, difficulty, first_blood_points, second_blood_points, default_points
+                ) VALUES (lower(hex(randomblob(3))), ?, ?, ?, 'easy', ?, ?, ?)`,
+          params: [title, desc, flag, EASY_FIRST_BLOOD_POINTS, EASY_SECOND_BLOOD_POINTS, EASY_THIRD_BLOOD_POINTS],
           errorLabel: 'Error seeding sample flags'
         });
       });
@@ -199,19 +213,37 @@ function initializeDatabase(): void {
       });
       migrationSteps.push({
         sql: `UPDATE challenges
-              SET first_blood_points = ${DEFAULT_FIRST_BLOOD_POINTS}
+              SET difficulty = 'easy'
+              WHERE LOWER(TRIM(COALESCE(difficulty, ''))) NOT IN ('easy', 'medium', 'hard')`,
+        errorLabel: 'Error normalizing challenges.difficulty'
+      });
+      migrationSteps.push({
+        sql: `UPDATE challenges
+              SET first_blood_points = CASE LOWER(TRIM(COALESCE(difficulty, 'easy')))
+                WHEN 'hard' THEN ${HARD_FIRST_BLOOD_POINTS}
+                WHEN 'medium' THEN ${MEDIUM_FIRST_BLOOD_POINTS}
+                ELSE ${EASY_FIRST_BLOOD_POINTS}
+              END
               WHERE first_blood_points IS NULL OR first_blood_points <= 0`,
         errorLabel: 'Error normalizing challenges.first_blood_points'
       });
       migrationSteps.push({
         sql: `UPDATE challenges
-              SET second_blood_points = ${DEFAULT_SECOND_BLOOD_POINTS}
+              SET second_blood_points = CASE LOWER(TRIM(COALESCE(difficulty, 'easy')))
+                WHEN 'hard' THEN ${HARD_SECOND_BLOOD_POINTS}
+                WHEN 'medium' THEN ${MEDIUM_SECOND_BLOOD_POINTS}
+                ELSE ${EASY_SECOND_BLOOD_POINTS}
+              END
               WHERE second_blood_points IS NULL OR second_blood_points <= 0`,
         errorLabel: 'Error normalizing challenges.second_blood_points'
       });
       migrationSteps.push({
         sql: `UPDATE challenges
-              SET default_points = ${DEFAULT_OTHER_POINTS}
+              SET default_points = CASE LOWER(TRIM(COALESCE(difficulty, 'easy')))
+                WHEN 'hard' THEN ${HARD_THIRD_BLOOD_POINTS}
+                WHEN 'medium' THEN ${MEDIUM_THIRD_BLOOD_POINTS}
+                ELSE ${EASY_THIRD_BLOOD_POINTS}
+              END
               WHERE default_points IS NULL OR default_points <= 0`,
         errorLabel: 'Error normalizing challenges.default_points'
       });

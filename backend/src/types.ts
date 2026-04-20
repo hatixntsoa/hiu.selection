@@ -23,12 +23,15 @@ export interface TeamMemberRow {
   created_at: string;
 }
 
+export type ChallengeDifficulty = 'easy' | 'medium' | 'hard';
+
 export interface ChallengeRow {
   id: number;
   public_id?: string;
   title: string;
   description: string;
   flag: string;
+  difficulty?: ChallengeDifficulty;
   first_blood_points?: number;
   second_blood_points?: number;
   default_points?: number;

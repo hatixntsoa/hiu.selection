@@ -16,6 +16,8 @@ export interface TeamMember {
   created_at?: string;
 }
 
+export type Difficulty = 'easy' | 'medium' | 'hard';
+
 export interface Challenge {
   id: number;
   public_id?: string;
@@ -24,6 +26,7 @@ export interface Challenge {
   description: string;
   category: string;
   points: number;
+  difficulty?: Difficulty;
   first_blood_points?: number;
   second_blood_points?: number;
   default_points?: number;
@@ -41,6 +44,7 @@ export interface ActivityItem {
   team_name?: string;
   teamName?: string;
   points: number;
+  difficulty?: Difficulty | null;
   submitted_at?: string;
   timestamp?: string;
 }
@@ -49,6 +53,7 @@ export interface SubmissionHistoryItem {
   id: number;
   challenge_id: number;
   challenge_public_id?: string;
+  challenge_difficulty?: Difficulty | null;
   submitted_flag: string;
   is_correct: number;
   submitted_at: string;
@@ -83,6 +88,7 @@ export interface AdminTeamSubmission {
   awarded_points: number;
   submitted_at: string;
   challenge_public_id?: string | null;
+  challenge_difficulty?: Difficulty | null;
 }
 
 export interface AdminTeamDetails {

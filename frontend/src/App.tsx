@@ -87,6 +87,7 @@ type SolveToast = {
   id: string;
   team: string;
   points: number;
+  difficulty: 'easy' | 'medium' | 'hard';
 };
 
 function RealtimeSolveToasts(): JSX.Element {
@@ -94,6 +95,15 @@ function RealtimeSolveToasts(): JSX.Element {
   const { t } = usePreferences();
   const location = useLocation();
   const [toasts, setToasts] = useState<SolveToast[]>([]);
+  const difficultyLabel = (difficulty: 'easy' | 'medium' | 'hard'): string => {
+    if (difficulty === 'medium') {
+      return t('difficultyMedium');
+    }
+    if (difficulty === 'hard') {
+      return t('difficultyHard');
+    }
+    return t('difficultyEasy');
+  };
 
   useEffect(() => {
     const isLiveRoute =
@@ -115,8 +125,10 @@ function RealtimeSolveToasts(): JSX.Element {
       const onFlagCaptured = (data: ActivityItem): void => {
         const team = data.teamName || data.team_name || 'Unknown';
         const points = Number(data.points) || 0;
-        const id = `${team}-${points}-${data.timestamp || data.submitted_at || Date.now()}`;
-        setToasts((prev) => [{ id, team, points }, ...prev].slice(0, 5));
+        const difficulty: SolveToast['difficulty'] =
+          data.difficulty === 'medium' || data.difficulty === 'hard' ? data.difficulty : 'easy';
+        const id = `${team}-${points}-${difficulty}-${data.timestamp || data.submitted_at || Date.now()}`;
+        setToasts((prev) => [{ id, team, points, difficulty }, ...prev].slice(0, 5));
       };
       socket.on('flag_captured', onFlagCaptured);
       cleanup = () => {
@@ -144,7 +156,11 @@ function RealtimeSolveToasts(): JSX.Element {
           className="live-solve-toast"
         >
           <Toast.Body>
-            {t('solveToastSimple', { team: item.team, points: item.points })}
+            {t('solveToastSimpleDifficulty', {
+              team: item.team,
+              points: item.points,
+              difficulty: difficultyLabel(item.difficulty)
+            })}
           </Toast.Body>
         </Toast>
       ))}

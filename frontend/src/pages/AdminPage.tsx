@@ -31,6 +31,15 @@ function AdminPage(): JSX.Element {
     : typeof timer?.timeLeftSeconds === 'number'
       ? new Date(timer.timeLeftSeconds * 1000).toISOString().substring(11, 19)
       : t('timerFinished');
+  const difficultyLabel = (difficulty?: string | null): string => {
+    if (difficulty === 'medium') {
+      return t('difficultyMedium');
+    }
+    if (difficulty === 'hard') {
+      return t('difficultyHard');
+    }
+    return t('difficultyEasy');
+  };
 
   const fetchData = async (): Promise<void> => {
     try {
@@ -319,6 +328,7 @@ function AdminPage(): JSX.Element {
                       <tr>
                         <th>{t('managerTableId')}</th>
                         <th>{t('dashboardFlagLabel')}</th>
+                        <th>{t('managerTableDifficulty')}</th>
                         <th>{t('adminTeamDetailsResult')}</th>
                         <th>{t('adminTeamDetailsPoints')}</th>
                         <th>{t('adminTeamDetailsSubmittedAt')}</th>
@@ -329,6 +339,7 @@ function AdminPage(): JSX.Element {
                         <tr key={submission.id}>
                           <td>{submission.challenge_public_id || '-'}</td>
                           <td>{submission.submitted_flag}</td>
+                          <td>{difficultyLabel(submission.challenge_difficulty)}</td>
                           <td>{submission.is_correct ? t('adminTeamDetailsCorrect') : t('adminTeamDetailsWrong')}</td>
                           <td>{submission.awarded_points || 0}</td>
                           <td>{new Date(submission.submitted_at).toLocaleString(language === 'fr' ? 'fr-FR' : 'en-US')}</td>

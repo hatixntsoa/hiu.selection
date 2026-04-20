@@ -4,7 +4,7 @@ import { Request, Response } from 'express';
 import sqlite3 from 'sqlite3';
 import { Server } from 'socket.io';
 import { getDatabase } from '../models/database';
-import { TeamMemberRow, TeamRow } from '../types';
+import { ChallengeDifficulty, TeamMemberRow, TeamRow } from '../types';
 
 const MAX_TEAM_MEMBERS = 6;
 
@@ -503,6 +503,7 @@ type AdminSubmissionRow = {
   awarded_points: number;
   submitted_at: string;
   challenge_public_id: string | null;
+  challenge_difficulty: ChallengeDifficulty | null;
 };
 
 export function getTeamDetailsByAdmin(req: Request, res: Response): Response | void {
@@ -535,7 +536,7 @@ export function getTeamDetailsByAdmin(req: Request, res: Response): Response | v
           }
 
           db.all<AdminSubmissionRow>(
-            `SELECT s.id, s.submitted_flag, s.is_correct, s.awarded_points, s.submitted_at, c.public_id as challenge_public_id
+            `SELECT s.id, s.submitted_flag, s.is_correct, s.awarded_points, s.submitted_at, c.public_id as challenge_public_id, c.difficulty as challenge_difficulty
              FROM submissions s
              LEFT JOIN challenges c ON c.id = s.challenge_id
              WHERE s.team_id = ?

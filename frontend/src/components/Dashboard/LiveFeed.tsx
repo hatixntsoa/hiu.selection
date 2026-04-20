@@ -4,6 +4,15 @@ import { usePreferences } from '../../context/PreferencesContext';
 
 function LiveFeed({ activity }: { activity: ActivityItem[] }): JSX.Element {
   const { t, language } = usePreferences();
+  const difficultyLabel = (difficulty?: string | null): string => {
+    if (difficulty === 'medium') {
+      return t('difficultyMedium');
+    }
+    if (difficulty === 'hard') {
+      return t('difficultyHard');
+    }
+    return t('difficultyEasy');
+  };
 
   if (activity.length === 0) {
     return <p className="text-secondary text-center mb-0">{t('liveFeedNoActivity')}</p>;
@@ -15,7 +24,10 @@ function LiveFeed({ activity }: { activity: ActivityItem[] }): JSX.Element {
           {activity.map((item, index) => (
             <ListGroup.Item key={index} className="bg-transparent activity-item">
               <div className="d-flex justify-content-between align-items-start">
-              <div><strong>{item.team_name || item.teamName}</strong></div>
+              <div>
+                <strong>{item.team_name || item.teamName}</strong>
+                <span className="text-secondary ms-2">({difficultyLabel(item.difficulty)})</span>
+              </div>
               <Badge bg="success">+{item.points} pts</Badge>
             </div>
             <small className="text-secondary">

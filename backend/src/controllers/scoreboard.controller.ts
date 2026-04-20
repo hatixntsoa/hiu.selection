@@ -20,6 +20,7 @@ type ActivityRow = {
   submitted_at: string;
   team_name: string;
   points: number;
+  difficulty: 'easy' | 'medium' | 'hard' | null;
 };
 
 type CountRow = { total: number };
@@ -50,9 +51,10 @@ export function getActivityFeed(_req: Request, res: Response): Response | void {
   const db = getDatabase();
 
   db.all<ActivityRow>(
-    `SELECT s.submitted_at, t.name as team_name, s.awarded_points as points
+    `SELECT s.submitted_at, t.name as team_name, s.awarded_points as points, c.difficulty as difficulty
      FROM submissions s
      JOIN teams t ON s.team_id = t.id
+     LEFT JOIN challenges c ON s.challenge_id = c.id
      WHERE s.is_correct = 1
      ORDER BY s.submitted_at DESC
      LIMIT 20`,

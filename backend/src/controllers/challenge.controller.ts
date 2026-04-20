@@ -1,12 +1,13 @@
 import { Request, Response } from 'express';
 import sqlite3 from 'sqlite3';
 import { getDatabase } from '../models/database';
-import { ChallengeRow } from '../types';
+import { ChallengeDifficulty, ChallengeRow } from '../types';
 
 type FlagInput = {
   title?: string;
   description?: string;
   flag?: string;
+  difficulty?: ChallengeDifficulty;
   first_blood_points?: number;
   second_blood_points?: number;
   default_points?: number;
@@ -16,9 +17,12 @@ type FlagImportItem = {
   flag?: string;
 };
 
-const DEFAULT_FIRST_BLOOD_POINTS = 100;
-const DEFAULT_SECOND_BLOOD_POINTS = 75;
-const DEFAULT_OTHER_POINTS = 50;
+const DIFFICULTY_POINTS: Record<ChallengeDifficulty, { first: number; second: number; third: number }> = {
+  easy: { first: 100, second: 75, third: 50 },
+  medium: { first: 200, second: 150, third: 100 },
+  hard: { first: 300, second: 225, third: 150 }
+};
+const DEFAULT_DIFFICULTY: ChallengeDifficulty = 'easy';
 
 function normalizePositiveInt(value: unknown, fallback: number): number {
   const number = typeof value === 'number' ? value : Number(value);
@@ -26,6 +30,14 @@ function normalizePositiveInt(value: unknown, fallback: number): number {
     return fallback;
   }
   return Math.floor(number);
+}
+
+function normalizeDifficulty(value: unknown, fallback: ChallengeDifficulty = DEFAULT_DIFFICULTY): ChallengeDifficulty {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (normalized === 'easy' || normalized === 'medium' || normalized === 'hard') {
+    return normalized;
+  }
+  return fallback;
 }
 
 function generatePublicId(): string {
@@ -39,7 +51,15 @@ function generatePublicId(): string {
 
 function createFlagWithRetry(
   db: sqlite3.Database,
-  input: { title: string; description: string; flag: string; firstBloodPoints: number; secondBloodPoints: number; defaultPoints: number },
+  input: {
+    title: string;
+    description: string;
+    flag: string;
+    difficulty: ChallengeDifficulty;
+    firstBloodPoints: number;
+    secondBloodPoints: number;
+    defaultPoints: number;
+  },
   maxAttempts: number,
   done: (err: Error | null, result?: { id: number; publicId: string }) => void
 ): void {
@@ -49,13 +69,14 @@ function createFlagWithRetry(
     const publicId = generatePublicId();
     db.run(
       `INSERT INTO challenges (
-         public_id, title, description, flag, first_blood_points, second_blood_points, default_points
-       ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+         public_id, title, description, flag, difficulty, first_blood_points, second_blood_points, default_points
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         publicId,
         input.title,
         input.description,
         input.flag,
+        input.difficulty,
         input.firstBloodPoints,
         input.secondBloodPoints,
         input.defaultPoints
@@ -80,10 +101,10 @@ export function getAllChallenges(req: Request, res: Response): Response | void {
   const db = getDatabase();
   const includeFlag = req.query.includeFlag === 'true';
   const query = includeFlag
-    ? `SELECT id, public_id, title, description, flag, first_blood_points, second_blood_points, default_points, created_at
-       FROM challenges ORDER BY created_at DESC, id DESC`
-    : `SELECT id, public_id, title, description, first_blood_points, second_blood_points, default_points, created_at
-       FROM challenges ORDER BY created_at DESC, id DESC`;
+    ? `SELECT id, public_id, title, description, flag, difficulty, first_blood_points, second_blood_points, default_points, created_at
+        FROM challenges ORDER BY created_at DESC, id DESC`
+    : `SELECT id, public_id, title, description, difficulty, first_blood_points, second_blood_points, default_points, created_at
+        FROM challenges ORDER BY created_at DESC, id DESC`;
 
   db.all<ChallengeRow>(query, [], (err, rows) => {
     if (err) {
@@ -97,7 +118,7 @@ export function getChallengeById(req: Request, res: Response): Response | void {
   const db = getDatabase();
   const { id } = req.params;
   db.get<ChallengeRow>(
-    `SELECT id, public_id, title, description, first_blood_points, second_blood_points, default_points, created_at
+    `SELECT id, public_id, title, description, difficulty, first_blood_points, second_blood_points, default_points, created_at
      FROM challenges WHERE id = ?`,
     [id],
     (err, row) => {
@@ -119,13 +140,16 @@ export function createChallenge(req: Request, res: Response): Response | void {
     return res.status(400).json({ error: 'Flag value is required' });
   }
   const db = getDatabase();
+  const difficulty = normalizeDifficulty(payload.difficulty, DEFAULT_DIFFICULTY);
+  const difficultyDefaults = DIFFICULTY_POINTS[difficulty];
   const input = {
     title: (payload.title || '').trim(),
     description: (payload.description || '').trim(),
     flag: flagValue,
-    firstBloodPoints: normalizePositiveInt(payload.first_blood_points, DEFAULT_FIRST_BLOOD_POINTS),
-    secondBloodPoints: normalizePositiveInt(payload.second_blood_points, DEFAULT_SECOND_BLOOD_POINTS),
-    defaultPoints: normalizePositiveInt(payload.default_points, DEFAULT_OTHER_POINTS)
+    difficulty,
+    firstBloodPoints: normalizePositiveInt(payload.first_blood_points, difficultyDefaults.first),
+    secondBloodPoints: normalizePositiveInt(payload.second_blood_points, difficultyDefaults.second),
+    defaultPoints: normalizePositiveInt(payload.default_points, difficultyDefaults.third)
   };
   createFlagWithRetry(db, input, 10, (err, result) => {
     if (err || !result) {
@@ -138,6 +162,7 @@ export function createChallenge(req: Request, res: Response): Response | void {
         public_id: result.publicId,
         title: input.title,
         description: input.description,
+        difficulty: input.difficulty,
         first_blood_points: input.firstBloodPoints,
         second_blood_points: input.secondBloodPoints,
         default_points: input.defaultPoints
@@ -165,14 +190,26 @@ export function updateChallenge(req: Request, res: Response): Response | void {
     }
     updates.push({ sql: 'flag = ?', value: flag });
   }
+  if (typeof payload.difficulty !== 'undefined') {
+    updates.push({ sql: 'difficulty = ?', value: normalizeDifficulty(payload.difficulty, DEFAULT_DIFFICULTY) });
+  }
   if (typeof payload.first_blood_points !== 'undefined') {
-    updates.push({ sql: 'first_blood_points = ?', value: normalizePositiveInt(payload.first_blood_points, DEFAULT_FIRST_BLOOD_POINTS) });
+    updates.push({
+      sql: 'first_blood_points = ?',
+      value: normalizePositiveInt(payload.first_blood_points, DIFFICULTY_POINTS[DEFAULT_DIFFICULTY].first)
+    });
   }
   if (typeof payload.second_blood_points !== 'undefined') {
-    updates.push({ sql: 'second_blood_points = ?', value: normalizePositiveInt(payload.second_blood_points, DEFAULT_SECOND_BLOOD_POINTS) });
+    updates.push({
+      sql: 'second_blood_points = ?',
+      value: normalizePositiveInt(payload.second_blood_points, DIFFICULTY_POINTS[DEFAULT_DIFFICULTY].second)
+    });
   }
   if (typeof payload.default_points !== 'undefined') {
-    updates.push({ sql: 'default_points = ?', value: normalizePositiveInt(payload.default_points, DEFAULT_OTHER_POINTS) });
+    updates.push({
+      sql: 'default_points = ?',
+      value: normalizePositiveInt(payload.default_points, DIFFICULTY_POINTS[DEFAULT_DIFFICULTY].third)
+    });
   }
 
   if (updates.length === 0) {
@@ -246,9 +283,10 @@ export function importFlags(req: Request, res: Response): Response | void {
         title: '',
         description: '',
         flag,
-        firstBloodPoints: DEFAULT_FIRST_BLOOD_POINTS,
-        secondBloodPoints: DEFAULT_SECOND_BLOOD_POINTS,
-        defaultPoints: DEFAULT_OTHER_POINTS
+        difficulty: DEFAULT_DIFFICULTY,
+        firstBloodPoints: DIFFICULTY_POINTS[DEFAULT_DIFFICULTY].first,
+        secondBloodPoints: DIFFICULTY_POINTS[DEFAULT_DIFFICULTY].second,
+        defaultPoints: DIFFICULTY_POINTS[DEFAULT_DIFFICULTY].third
       },
       10,
       (err, result) => {
