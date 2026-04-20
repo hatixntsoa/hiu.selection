@@ -1,5 +1,7 @@
 import bcrypt from 'bcrypt';
 import jwt, { SignOptions } from 'jsonwebtoken';
+import nodemailer from 'nodemailer';
+import crypto from 'crypto';
 import { Request, Response } from 'express';
 import sqlite3 from 'sqlite3';
 import { Server } from 'socket.io';
@@ -7,6 +9,10 @@ import { getDatabase } from '../models/database';
 import { ChallengeDifficulty, TeamMemberRow, TeamRow } from '../types';
 
 const MAX_TEAM_MEMBERS = 6;
+const ADMIN_SENDER_EMAIL_CONFIG_KEY = 'admin_sender_email';
+const ADMIN_SENDER_APP_PASSWORD_CONFIG_KEY = 'admin_sender_app_password';
+const ADMIN_OVA_LINK_CONFIG_KEY = 'admin_ova_link';
+const DEFAULT_ADMIN_OVA_LINK = 'https://drive.google.com';
 
 function getJwtOptions(): SignOptions {
   const expiresIn = process.env.JWT_EXPIRES_IN || '24h';
@@ -46,6 +52,50 @@ function teamPayload(team: TeamRow): { id: number; name: string; score: number; 
   };
 }
 
+function dbGet<T>(db: sqlite3.Database, sql: string, params: unknown[] = []): Promise<T | undefined> {
+  return new Promise((resolve, reject) => {
+    db.get<T>(sql, params, (err, row) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      resolve(row);
+    });
+  });
+}
+
+function dbRun(db: sqlite3.Database, sql: string, params: unknown[] = []): Promise<sqlite3.RunResult> {
+  return new Promise((resolve, reject) => {
+    db.run(sql, params, function (this: sqlite3.RunResult, err: Error | null) {
+      if (err) {
+        reject(err);
+        return;
+      }
+      resolve(this);
+    });
+  });
+}
+
+function dbAll<T>(db: sqlite3.Database, sql: string, params: unknown[] = []): Promise<T[]> {
+  return new Promise((resolve, reject) => {
+    db.all<T>(sql, params, (err, rows) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      resolve(rows);
+    });
+  });
+}
+
+function normalizeLeaderEmail(teamName: string): string {
+  return `${teamName.toLowerCase().replace(/[^a-z0-9]+/g, '_')}_leader@example.com`;
+}
+
+function isLikelyEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
 export function register(req: Request, res: Response): Response | void {
   const { name, password } = req.body as { name?: string; password?: string };
 
@@ -63,6 +113,7 @@ export function register(req: Request, res: Response): Response | void {
     return res.status(400).json({ error: 'Username is reserved' });
   }
   const syntheticEmail = toSyntheticEmail(trimmedName);
+  const leaderEmail = normalizeLeaderEmail(trimmedName);
 
   db.get<TeamRow>('SELECT * FROM teams WHERE name = ? COLLATE NOCASE', [trimmedName], (lookupErr, existingTeam) => {
     if (lookupErr) {
@@ -75,8 +126,8 @@ export function register(req: Request, res: Response): Response | void {
 
     const hashedPassword = bcrypt.hashSync(password, 10);
     db.run(
-      'INSERT INTO teams (name, email, password, member_count) VALUES (?, ?, ?, 0)',
-      [trimmedName, syntheticEmail, hashedPassword],
+      'INSERT INTO teams (name, email, password, team_plain_password, team_leader_email, member_count) VALUES (?, ?, ?, ?, ?, 0)',
+      [trimmedName, syntheticEmail, hashedPassword, password, leaderEmail],
       function (this: sqlite3.RunResult, err: Error | null) {
         if (err) {
           if (err.message.includes('UNIQUE constraint')) {
@@ -496,6 +547,278 @@ export function deleteTeamByAdmin(req: Request, res: Response): Response | void 
   });
 }
 
+export async function getTeamEditByAdmin(req: Request, res: Response): Promise<Response> {
+  const teamId = Number(req.params.teamId);
+  if (!Number.isInteger(teamId) || teamId <= 0) {
+    return res.status(400).json({ error: 'Team not found' });
+  }
+
+  const db = getDatabase();
+  try {
+    const team = await dbGet<TeamRow & { team_leader_email: string | null; team_plain_password: string | null }>(
+      db,
+      `SELECT id, name, email, password, team_leader_email, team_plain_password, score, member_count, is_admin, created_at
+       FROM teams
+       WHERE id = ?`,
+      [teamId]
+    );
+
+    if (!team || team.is_admin === 1) {
+      return res.status(404).json({ error: 'Team not found' });
+    }
+
+    let nextLeaderEmail = team.team_leader_email?.trim() || normalizeLeaderEmail(team.name);
+    let nextPlainPassword = team.team_plain_password?.trim() || '';
+    if (!nextPlainPassword) {
+      const generated = crypto.randomBytes(10).toString('hex');
+      const hashed = bcrypt.hashSync(generated, 10);
+      await dbRun(db, 'UPDATE teams SET password = ?, team_plain_password = ? WHERE id = ?', [hashed, generated, teamId]);
+      nextPlainPassword = generated;
+    }
+    if (!team.team_leader_email || !team.team_leader_email.trim()) {
+      await dbRun(db, 'UPDATE teams SET team_leader_email = ? WHERE id = ?', [nextLeaderEmail, teamId]);
+    }
+
+    return res.json({
+      team: {
+        id: team.id,
+        name: team.name,
+        score: team.score,
+        created_at: team.created_at,
+        teamLeaderEmail: nextLeaderEmail
+      },
+      password: nextPlainPassword
+    });
+  } catch {
+    return res.status(500).json({ error: 'Database error' });
+  }
+}
+
+export async function updateTeamByAdmin(req: Request, res: Response): Promise<Response> {
+  const teamId = Number(req.params.teamId);
+  const { name, password, teamLeaderEmail } = req.body as { name?: string; password?: string; teamLeaderEmail?: string };
+
+  if (!Number.isInteger(teamId) || teamId <= 0) {
+    return res.status(400).json({ error: 'Team not found' });
+  }
+  if (!name || !name.trim() || !password) {
+    return res.status(400).json({ error: 'Username and password are required' });
+  }
+  if (password.length < 6) {
+    return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  }
+  if (!teamLeaderEmail || !teamLeaderEmail.trim() || !isLikelyEmail(teamLeaderEmail.trim())) {
+    return res.status(400).json({ error: 'Valid team leader email is required' });
+  }
+
+  const trimmedName = name.trim();
+  const trimmedLeaderEmail = teamLeaderEmail.trim().toLowerCase();
+  if (trimmedName.toLowerCase() === 'admin') {
+    return res.status(400).json({ error: 'Username is reserved' });
+  }
+
+  const db = getDatabase();
+  try {
+    const team = await dbGet<TeamRow>(db, 'SELECT id, is_admin FROM teams WHERE id = ?', [teamId]);
+    if (!team || team.is_admin === 1) {
+      return res.status(404).json({ error: 'Team not found' });
+    }
+
+    const teamClash = await dbGet<{ id: number }>(db, 'SELECT id FROM teams WHERE id != ? AND name = ? COLLATE NOCASE', [teamId, trimmedName]);
+    if (teamClash) {
+      return res.status(400).json({ error: 'Username already exists' });
+    }
+
+    const memberClash = await dbGet<{ id: number }>(
+      db,
+      `SELECT id
+       FROM team_members
+       WHERE username = ? COLLATE NOCASE
+         AND NOT (team_id = ? AND is_primary = 1)`,
+      [trimmedName, teamId]
+    );
+    if (memberClash) {
+      return res.status(400).json({ error: 'Username already exists' });
+    }
+
+    const hashedPassword = bcrypt.hashSync(password, 10);
+    await dbRun(
+      db,
+      'UPDATE teams SET name = ?, email = ?, password = ?, team_plain_password = ?, team_leader_email = ? WHERE id = ?',
+      [trimmedName, toSyntheticEmail(trimmedName), hashedPassword, password, trimmedLeaderEmail, teamId]
+    );
+    await dbRun(db, 'UPDATE team_members SET username = ? WHERE team_id = ? AND is_primary = 1', [trimmedName, teamId]);
+    await new Promise<void>((resolve, reject) => {
+      syncTeamMemberCount(db, teamId, (syncErr) => {
+        if (syncErr) {
+          reject(syncErr);
+          return;
+        }
+        resolve();
+      });
+    });
+
+    const freshTeam = await dbGet<TeamRow>(db, 'SELECT id, name, email, score, member_count, is_admin, created_at FROM teams WHERE id = ?', [teamId]);
+    if (!freshTeam) {
+      return res.status(500).json({ error: 'Database error' });
+    }
+
+    emitRealtimeUpdates(req);
+    return res.json({ message: 'Team updated by admin', team: teamPayload(freshTeam) });
+  } catch {
+    return res.status(500).json({ error: 'Database error' });
+  }
+}
+
+export async function getAdminSenderConfig(_req: Request, res: Response): Promise<Response> {
+  const db = getDatabase();
+  try {
+    const rows = await dbAll<{ key: string; value: string }>(
+      db,
+      'SELECT key, value FROM app_config WHERE key IN (?, ?, ?)',
+      [ADMIN_SENDER_EMAIL_CONFIG_KEY, ADMIN_SENDER_APP_PASSWORD_CONFIG_KEY, ADMIN_OVA_LINK_CONFIG_KEY]
+    );
+    const map = new Map(rows.map((row) => [row.key, row.value]));
+    return res.json({
+      senderEmail: map.get(ADMIN_SENDER_EMAIL_CONFIG_KEY) || '',
+      appPassword: map.get(ADMIN_SENDER_APP_PASSWORD_CONFIG_KEY) || '',
+      ovaLink: map.get(ADMIN_OVA_LINK_CONFIG_KEY) || DEFAULT_ADMIN_OVA_LINK
+    });
+  } catch {
+    return res.status(500).json({ error: 'Database error' });
+  }
+}
+
+export async function updateAdminSenderConfig(_req: Request, res: Response): Promise<Response> {
+  const { senderEmail, appPassword, ovaLink } = _req.body as { senderEmail?: string; appPassword?: string; ovaLink?: string };
+  if (!senderEmail || !appPassword || !isLikelyEmail(senderEmail.trim())) {
+    return res.status(400).json({ error: 'Sender email and app password are required' });
+  }
+  const normalizedOvaLink = String(ovaLink || '').trim() || DEFAULT_ADMIN_OVA_LINK;
+  if (!/^https?:\/\//i.test(normalizedOvaLink)) {
+    return res.status(400).json({ error: 'Valid OVA link is required' });
+  }
+
+  const normalizedEmail = senderEmail.trim().toLowerCase();
+  const normalizedPassword = appPassword.trim();
+  try {
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: normalizedEmail,
+        pass: normalizedPassword
+      }
+    });
+    await transporter.verify();
+  } catch {
+    return res.status(400).json({ error: 'Unable to authenticate sender credentials' });
+  }
+
+  const db = getDatabase();
+  try {
+    await dbRun(
+      db,
+      `INSERT INTO app_config (key, value) VALUES (?, ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      [ADMIN_SENDER_EMAIL_CONFIG_KEY, normalizedEmail]
+    );
+    await dbRun(
+      db,
+      `INSERT INTO app_config (key, value) VALUES (?, ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      [ADMIN_SENDER_APP_PASSWORD_CONFIG_KEY, normalizedPassword]
+    );
+    await dbRun(
+      db,
+      `INSERT INTO app_config (key, value) VALUES (?, ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      [ADMIN_OVA_LINK_CONFIG_KEY, normalizedOvaLink]
+    );
+    return res.json({ message: 'Sender credentials updated' });
+  } catch {
+    return res.status(500).json({ error: 'Database error' });
+  }
+}
+
+export async function shareTeamCredentialsByAdmin(req: Request, res: Response): Promise<Response> {
+  const teamId = Number(req.params.teamId);
+  if (!Number.isInteger(teamId) || teamId <= 0) {
+    return res.status(400).json({ error: 'Team not found' });
+  }
+
+  const db = getDatabase();
+  try {
+    const team = await dbGet<TeamRow & { team_leader_email: string | null; team_plain_password: string | null }>(
+      db,
+      `SELECT id, name, score, is_admin, team_leader_email, team_plain_password
+       FROM teams
+       WHERE id = ?`,
+      [teamId]
+    );
+    if (!team || team.is_admin === 1) {
+      return res.status(404).json({ error: 'Team not found' });
+    }
+
+    const leaderEmail = team.team_leader_email?.trim();
+    const plainPassword = team.team_plain_password?.trim();
+    if (!leaderEmail || !plainPassword) {
+      return res.status(400).json({ error: 'Team credentials are incomplete' });
+    }
+
+    const configRows = await dbAll<{ key: string; value: string }>(
+      db,
+      'SELECT key, value FROM app_config WHERE key IN (?, ?, ?)',
+      [ADMIN_SENDER_EMAIL_CONFIG_KEY, ADMIN_SENDER_APP_PASSWORD_CONFIG_KEY, ADMIN_OVA_LINK_CONFIG_KEY]
+    );
+    const configMap = new Map(configRows.map((row) => [row.key, row.value]));
+    const senderEmail = configMap.get(ADMIN_SENDER_EMAIL_CONFIG_KEY);
+    const senderPassword = configMap.get(ADMIN_SENDER_APP_PASSWORD_CONFIG_KEY);
+    const ovaLink = configMap.get(ADMIN_OVA_LINK_CONFIG_KEY) || DEFAULT_ADMIN_OVA_LINK;
+    if (!senderEmail || !senderPassword) {
+      return res.status(400).json({ error: 'Admin sender credentials are not configured' });
+    }
+
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: senderEmail,
+        pass: senderPassword
+      }
+    });
+
+    await transporter.sendMail({
+      from: senderEmail,
+      to: leaderEmail,
+      subject: `CTF Team Credentials - ${team.name}`,
+      text: `Hello Team ${team.name},
+
+Welcome to HIU Selection CTF 2026 !
+In order to submit flags on the CTF Platform,
+you will have to login using the following credentials :
+
+username : ${team.name}
+password : ${plainPassword}
+
+Oh and btw here is the VM as .ova file
+that you will try to get into :
+
+${ovaLink}
+
+
+Have fun, Hack the planet !
+
+I'll let you all cook now, break a leg.
+
+Sincerely,
+Admin`
+    });
+
+    return res.json({ message: 'Team credentials email sent' });
+  } catch {
+    return res.status(500).json({ error: 'Failed to send team credentials email' });
+  }
+}
+
 type AdminSubmissionRow = {
   id: number;
   submitted_flag: string;
@@ -514,7 +837,7 @@ export function getTeamDetailsByAdmin(req: Request, res: Response): Response | v
 
   const db = getDatabase();
   db.get<TeamRow>(
-    'SELECT id, name, score, member_count, created_at, is_admin FROM teams WHERE id = ?',
+    'SELECT id, name, score, member_count, created_at, is_admin, team_leader_email FROM teams WHERE id = ?',
     [teamId],
     (teamErr, team) => {
       if (teamErr) {
@@ -553,7 +876,8 @@ export function getTeamDetailsByAdmin(req: Request, res: Response): Response | v
                   name: team.name,
                   score: team.score,
                   memberCount: team.member_count || 0,
-                  created_at: team.created_at
+                  created_at: team.created_at,
+                  teamLeaderEmail: team.team_leader_email || null
                 },
                 members,
                 submissions

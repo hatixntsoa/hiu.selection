@@ -32,7 +32,7 @@ function Scoreboard({
                 {team.rank === 1 && '🥇'}
                 {team.rank === 2 && '🥈'}
                 {team.rank === 3 && '🥉'}
-                {team.rank > 3 && team.rank}
+                {team.rank !== null && team.rank > 3 && team.rank}
               </td>
               <td>
                 {team.name}

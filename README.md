@@ -14,8 +14,9 @@ A full-stack CTF platform with real-time scoring, admin controls, timer-based co
 - **Themes:** system/light/dark with GitHub-style dark palette
 - **Settings:** theme, language (EN/FR), font family
 - **i18n:** UI text localized (EN/FR)
-- **Admin features:** challenge CRUD, category management, CTF timer controls, teams list with team deletion, live scoreboard view (with fullscreen button)
-- **CTF timer controls (admin):** set duration, restart, add time, infinite mode
+- **Admin features:** challenge CRUD, category management, CTF timer controls, teams list with edit/share/delete, sender email config, live scoreboard view (with fullscreen button)
+- **CTF timer controls (admin):** set duration (hours + minutes), restart, add time, infinite mode
+- **Default teams:** `team1` to `team15` are pre-created with random 8-char hexadecimal passwords and default leader emails (`team1_leader@example.com`, etc.)
 - **Timer enforcement:** non-admin submissions locked when timer is over
 - **End state for teams:** when CTF ends, team users are redirected to an end page with team name, rank, and points
 

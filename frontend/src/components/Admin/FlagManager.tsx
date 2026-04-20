@@ -64,6 +64,7 @@ function FlagManager({ onFlagChange }: { onFlagChange?: () => void }): JSX.Eleme
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [isImporting, setIsImporting] = useState(false);
+  const [showFlags, setShowFlags] = useState(false);
 
   const importHint = useMemo(
     () => t('adminFlagsImportHint'),
@@ -215,9 +216,19 @@ function FlagManager({ onFlagChange }: { onFlagChange?: () => void }): JSX.Eleme
     <div>
       <div className="d-flex justify-content-between align-items-center mb-3">
         <h5 className="mb-0 section-title">{t('adminFlagsTitle')}</h5>
-        <Button variant="primary" onClick={() => handleShowModal()}>
-          {t('adminFlagsAdd')}
-        </Button>
+        <div className="d-flex align-items-center gap-2">
+          <Button
+            variant="outline-secondary"
+            onClick={() => setShowFlags((prev) => !prev)}
+            aria-label={showFlags ? t('hidePassword') : t('showPassword')}
+            title={showFlags ? t('hidePassword') : t('showPassword')}
+          >
+            {showFlags ? '🙈' : '👁'}
+          </Button>
+          <Button variant="primary" onClick={() => handleShowModal()}>
+            {t('adminFlagsAdd')}
+          </Button>
+        </div>
       </div>
 
       {error && <Alert variant="danger">{error}</Alert>}
@@ -241,7 +252,7 @@ function FlagManager({ onFlagChange }: { onFlagChange?: () => void }): JSX.Eleme
               <td><code>{item.public_id || item.id}</code></td>
               <td>{item.title || '-'}</td>
               <td>{item.description || '-'}</td>
-              <td><code>{item.flag}</code></td>
+               <td><code>{showFlags ? item.flag : '••••••••••••••••••••'}</code></td>
               <td>{t(difficultyLabelKey(normalizeDifficulty(item.difficulty)))}</td>
               <td>{Math.max(Number(item.first_blood_points) || 100, Number(item.second_blood_points) || 75, Number(item.default_points) || 50)}</td>
               <td>

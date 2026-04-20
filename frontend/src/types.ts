@@ -67,7 +67,8 @@ export interface ScoreboardTeam {
   name: string;
   score: number;
   created_at: string;
-  rank: number;
+  team_leader_email?: string | null;
+  rank: number | null;
 }
 
 export interface CtfTimerState {
@@ -98,6 +99,7 @@ export interface AdminTeamDetails {
     score: number;
     memberCount: number;
     created_at: string;
+    teamLeaderEmail?: string | null;
   };
   members: TeamMember[];
   submissions: AdminTeamSubmission[];

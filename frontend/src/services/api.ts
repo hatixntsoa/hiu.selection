@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { notify } from './notifications';
 
 function resolveApiUrl(): string {
   if (import.meta.env.VITE_API_URL) {
@@ -33,8 +34,22 @@ api.interceptors.request.use((config) => {
 });
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const method = String(response.config?.method || 'get').toLowerCase();
+    const isMutating = method === 'post' || method === 'put' || method === 'patch' || method === 'delete';
+    const message = response.data?.message;
+    if (isMutating && typeof message === 'string' && message.trim().length > 0) {
+      notify('success', message);
+    }
+    return response;
+  },
   (error) => {
+    const method = String(error.config?.method || 'get').toLowerCase();
+    const isMutating = method === 'post' || method === 'put' || method === 'patch' || method === 'delete';
+    const message = error.response?.data?.error;
+    if (isMutating && typeof message === 'string' && message.trim().length > 0) {
+      notify('error', message);
+    }
     if (error.response?.status === 401) {
       localStorage.removeItem('token');
       localStorage.removeItem('team');

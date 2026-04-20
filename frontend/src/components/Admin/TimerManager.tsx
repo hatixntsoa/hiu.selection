@@ -19,14 +19,17 @@ function TimerManager({
   onTimerChange: (next: CtfTimerState) => void;
 }): JSX.Element {
   const { t, localizeApiMessage } = usePreferences();
-  const [durationMinutes, setDurationMinutes] = useState('120');
+  const [durationHours, setDurationHours] = useState('6');
+  const [durationMinutes, setDurationMinutes] = useState('0');
   const [addMinutes, setAddMinutes] = useState('15');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
   useEffect(() => {
     if (timer?.durationSeconds) {
-      setDurationMinutes(String(Math.max(1, Math.floor(timer.durationSeconds / 60))));
+      const totalMinutes = Math.max(1, Math.floor(timer.durationSeconds / 60));
+      setDurationHours(String(Math.floor(totalMinutes / 60)));
+      setDurationMinutes(String(totalMinutes % 60));
     }
   }, [timer?.durationSeconds]);
 
@@ -58,12 +61,31 @@ function TimerManager({
         ? t('adminTimerStatusExpired')
         : t('adminTimerStatusRunning');
 
-  const safeDurationMinutes = (): number => {
-    const parsed = Number(durationMinutes);
-    if (!Number.isFinite(parsed)) {
-      return 120;
+  const parseNonNegativeInteger = (value: string): number | null => {
+    const normalized = value.trim();
+    if (normalized.length === 0) {
+      return null;
     }
-    return Math.max(1, Math.floor(parsed));
+    const parsed = Number(normalized);
+    if (!Number.isInteger(parsed) || parsed < 0) {
+      return null;
+    }
+    return parsed;
+  };
+
+  const safeDurationMinutes = (): number | null => {
+    const parsedHours = parseNonNegativeInteger(durationHours);
+    const parsedMinutes = parseNonNegativeInteger(durationMinutes);
+    if (parsedHours === null || parsedMinutes === null || parsedMinutes >= 60) {
+      return null;
+    }
+
+    const totalMinutes = parsedHours * 60 + parsedMinutes;
+    if (totalMinutes <= 0) {
+      return null;
+    }
+
+    return totalMinutes;
   };
 
   const safeAddMinutes = (): number => {
@@ -88,22 +110,40 @@ function TimerManager({
 
   const handleSaveDuration = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
+    const totalMinutes = safeDurationMinutes();
+    if (totalMinutes === null) {
+      setError(t('adminTimerDurationInvalid'));
+      setSuccess('');
+      return;
+    }
     await runAction(async () => {
-      const response = await api.put('/scoreboard/timer', { durationSeconds: safeDurationMinutes() * 60 });
+      const response = await api.put('/scoreboard/timer', { durationSeconds: totalMinutes * 60 });
       return response.data.timer as CtfTimerState;
     });
   };
 
   const handleRestart = async (): Promise<void> => {
+    const totalMinutes = safeDurationMinutes();
+    if (totalMinutes === null) {
+      setError(t('adminTimerDurationInvalid'));
+      setSuccess('');
+      return;
+    }
     await runAction(async () => {
-      const response = await api.post('/scoreboard/timer/restart', { durationSeconds: safeDurationMinutes() * 60 });
+      const response = await api.post('/scoreboard/timer/restart', { durationSeconds: totalMinutes * 60 });
       return response.data.timer as CtfTimerState;
     });
   };
 
   const handleStart = async (): Promise<void> => {
+    const totalMinutes = safeDurationMinutes();
+    if (totalMinutes === null) {
+      setError(t('adminTimerDurationInvalid'));
+      setSuccess('');
+      return;
+    }
     await runAction(async () => {
-      const response = await api.post('/scoreboard/timer/start', { durationSeconds: safeDurationMinutes() * 60 });
+      const response = await api.post('/scoreboard/timer/start', { durationSeconds: totalMinutes * 60 });
       return response.data.timer as CtfTimerState;
     });
   };
@@ -142,11 +182,21 @@ function TimerManager({
 
         <Form onSubmit={handleSaveDuration}>
           <Row className="g-3 align-items-end">
-            <Col md={4}>
+            <Col md={2}>
               <Form.Label>{t('adminTimerDuration')}</Form.Label>
               <Form.Control
                 type="number"
-                min={1}
+                min={0}
+                value={durationHours}
+                onChange={(e) => setDurationHours(e.target.value)}
+              />
+            </Col>
+            <Col md={2}>
+              <Form.Label>{t('adminTimerDurationMinutes')}</Form.Label>
+              <Form.Control
+                type="number"
+                min={0}
+                max={59}
                 value={durationMinutes}
                 onChange={(e) => setDurationMinutes(e.target.value)}
               />

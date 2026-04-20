@@ -1,10 +1,10 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Alert, Badge, Button, Container, Form, Modal, Nav, Navbar as BSNavbar } from 'react-bootstrap';
+import { Alert, Badge, Button, Container, Form, InputGroup, Modal, Nav, Navbar as BSNavbar } from 'react-bootstrap';
 import { useAuth } from '../context/AuthContext';
 import { usePreferences } from '../context/PreferencesContext';
 import api from '../services/api';
-import { CtfTimerState, TeamMember } from '../types';
+import { CtfTimerState, SubmissionHistoryItem } from '../types';
 
 function formatTimer(timer: CtfTimerState | null, t: (key: any, params?: Record<string, string | number>) => string): string {
   if (!timer) {
@@ -23,19 +23,21 @@ function formatTimer(timer: CtfTimerState | null, t: (key: any, params?: Record<
 }
 
 function Navbar(): JSX.Element {
-  const { user, logout, updateUser } = useAuth();
+  const { user, logout } = useAuth();
   const { t, toggleTheme, resolvedTheme, localizeApiMessage } = usePreferences();
   const [timer, setTimer] = useState<CtfTimerState | null>(null);
   const [showTeamModal, setShowTeamModal] = useState(false);
-  const [teamName, setTeamName] = useState('');
-  const [members, setMembers] = useState<TeamMember[]>([]);
-  const [memberCount, setMemberCount] = useState(0);
-  const [maxMembers, setMaxMembers] = useState(6);
-  const [newMemberUsername, setNewMemberUsername] = useState('');
-  const [editingMemberId, setEditingMemberId] = useState<number | null>(null);
-  const [editingMemberUsername, setEditingMemberUsername] = useState('');
+  const [teamSubmissions, setTeamSubmissions] = useState<SubmissionHistoryItem[]>([]);
+  const [teamModalLoading, setTeamModalLoading] = useState(false);
   const [teamError, setTeamError] = useState('');
-  const [teamSuccess, setTeamSuccess] = useState('');
+  const [showAdminMailModal, setShowAdminMailModal] = useState(false);
+  const [adminSenderEmail, setAdminSenderEmail] = useState('');
+  const [adminSenderPassword, setAdminSenderPassword] = useState('');
+  const [adminOvaLink, setAdminOvaLink] = useState('');
+  const [adminMailError, setAdminMailError] = useState('');
+  const [adminMailSuccess, setAdminMailSuccess] = useState('');
+  const [adminMailLoading, setAdminMailLoading] = useState(false);
+  const [showAdminSenderPassword, setShowAdminSenderPassword] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -68,104 +70,61 @@ function Navbar(): JSX.Element {
     };
   }, [user]);
 
-  const loadMembers = async (): Promise<void> => {
-    const response = await api.get('/auth/team/members');
-    const nextMembers = response.data.members as TeamMember[];
-    setMembers(nextMembers);
-    const nextMemberCount = Number(response.data.memberCount) || nextMembers.filter((member) => member.is_primary !== 1).length;
-    setMemberCount(nextMemberCount);
-    setMaxMembers(Number(response.data.maxMembers) || 6);
-    updateUser({ memberCount: nextMemberCount });
-  };
-
   const openTeamModal = (): void => {
     if (!user || user.isAdmin) {
       return;
     }
     setShowTeamModal(true);
-    setTeamName(user.name);
-    setNewMemberUsername('');
-    setEditingMemberId(null);
-    setEditingMemberUsername('');
     setTeamError('');
-    setTeamSuccess('');
-    void loadMembers().catch(() => undefined);
+    setTeamModalLoading(true);
+    api
+      .get('/flags/history')
+      .then((response) => {
+        setTeamSubmissions(response.data.submissions as SubmissionHistoryItem[]);
+      })
+      .catch((err: any) => {
+        setTeamError(localizeApiMessage(err.response?.data?.error || t('apiDatabaseError')));
+      })
+      .finally(() => setTeamModalLoading(false));
   };
 
-  const handleSaveTeamName = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
+  const openAdminMailModal = (): void => {
+    if (!user?.isAdmin) {
+      return;
+    }
+    setShowAdminMailModal(true);
+    setAdminMailError('');
+    setAdminMailSuccess('');
+    setAdminMailLoading(true);
+    api
+      .get('/auth/admin/sender-config')
+      .then((response) => {
+        setAdminSenderEmail(String(response.data.senderEmail || ''));
+        setAdminSenderPassword(String(response.data.appPassword || ''));
+        setAdminOvaLink(String(response.data.ovaLink || 'https://drive.google.com'));
+      })
+      .catch((err: any) => {
+        setAdminMailError(localizeApiMessage(err.response?.data?.error || t('apiDatabaseError')));
+      })
+      .finally(() => setAdminMailLoading(false));
+  };
+
+  const handleSaveAdminMailConfig = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
-    setTeamError('');
-    setTeamSuccess('');
+    setAdminMailError('');
+    setAdminMailSuccess('');
+    setAdminMailLoading(true);
     try {
-      const response = await api.put('/auth/team', { name: teamName.trim() });
-      const updatedTeam = response.data.team as { name: string; memberCount?: number };
-      updateUser({ name: updatedTeam.name, memberCount: updatedTeam.memberCount });
-      setTeamSuccess(localizeApiMessage(response.data.message || 'Team updated'));
+      const response = await api.put('/auth/admin/sender-config', {
+        senderEmail: adminSenderEmail.trim(),
+        appPassword: adminSenderPassword,
+        ovaLink: adminOvaLink.trim()
+      });
+      setAdminMailSuccess(localizeApiMessage(response.data.message || 'Sender credentials updated'));
     } catch (err: any) {
-      setTeamError(localizeApiMessage(err.response?.data?.error || t('apiDatabaseError')));
-    }
-  };
-
-  const handleAddMember = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
-    e.preventDefault();
-    setTeamError('');
-    setTeamSuccess('');
-    try {
-      const response = await api.post('/auth/team/members', { username: newMemberUsername.trim() });
-      setTeamSuccess(localizeApiMessage(response.data.message || 'Member added'));
-      setNewMemberUsername('');
-      await loadMembers();
-    } catch (err: any) {
-      setTeamError(localizeApiMessage(err.response?.data?.error || t('apiDatabaseError')));
-    }
-  };
-
-  const beginEditMember = (member: TeamMember): void => {
-    if (member.is_primary === 1) {
-      return;
-    }
-    setEditingMemberId(member.id);
-    setEditingMemberUsername(member.username);
-    setTeamError('');
-    setTeamSuccess('');
-  };
-
-  const cancelEditMember = (): void => {
-    setEditingMemberId(null);
-    setEditingMemberUsername('');
-  };
-
-  const handleSaveMemberEdit = async (memberId: number): Promise<void> => {
-    setTeamError('');
-    setTeamSuccess('');
-    try {
-      const response = await api.put(`/auth/team/members/${memberId}`, { username: editingMemberUsername.trim() });
-      setTeamSuccess(localizeApiMessage(response.data.message || 'Member updated'));
-      cancelEditMember();
-      await loadMembers();
-    } catch (err: any) {
-      setTeamError(localizeApiMessage(err.response?.data?.error || t('apiDatabaseError')));
-    }
-  };
-
-  const handleDeleteMember = async (member: TeamMember): Promise<void> => {
-    if (member.is_primary === 1) {
-      return;
-    }
-    if (!window.confirm(t('teamProfileDeleteConfirm', { username: member.username }))) {
-      return;
-    }
-    setTeamError('');
-    setTeamSuccess('');
-    try {
-      const response = await api.delete(`/auth/team/members/${member.id}`);
-      setTeamSuccess(localizeApiMessage(response.data.message || 'Member deleted'));
-      if (editingMemberId === member.id) {
-        cancelEditMember();
-      }
-      await loadMembers();
-    } catch (err: any) {
-      setTeamError(localizeApiMessage(err.response?.data?.error || t('apiDatabaseError')));
+      setAdminMailError(localizeApiMessage(err.response?.data?.error || t('apiDatabaseError')));
+    } finally {
+      setAdminMailLoading(false);
     }
   };
 
@@ -193,9 +152,6 @@ function Navbar(): JSX.Element {
                   <Nav.Link as={Link} to="/dashboard/ranking" active={location.pathname === '/dashboard/ranking'}>
                     {t('dashboardTabRanking')}
                   </Nav.Link>
-                  <Nav.Link as={Link} to="/dashboard/scoreboard" active={location.pathname === '/dashboard/scoreboard'}>
-                    {t('dashboardTabScoreboard')}
-                  </Nav.Link>
                   <Nav.Link as={Link} to="/dashboard/live-activity" active={location.pathname === '/dashboard/live-activity'}>
                     {t('dashboardTabLiveActivity')}
                   </Nav.Link>
@@ -218,6 +174,9 @@ function Navbar(): JSX.Element {
                   </Nav.Link>
                   <Nav.Link as={Link} to="/admin/teams" active={location.pathname === '/admin/teams'}>
                     {t('adminTabTeams')}
+                  </Nav.Link>
+                  <Nav.Link as={Link} to="/admin/activity" active={location.pathname === '/admin/activity'}>
+                    {t('adminTabActivity')}
                   </Nav.Link>
                   <Nav.Link as={Link} to="/admin/timer" active={location.pathname === '/admin/timer'}>
                     {t('adminTabTimer')}
@@ -244,7 +203,9 @@ function Navbar(): JSX.Element {
                       {timerText}
                     </Badge>
                     {user.isAdmin ? (
-                      <span className="text-body">{user.name}</span>
+                      <Button variant="link" className="p-0 text-body navbar-team-link" onClick={openAdminMailModal}>
+                        {user.name}
+                      </Button>
                     ) : (
                       <Button variant="link" className="p-0 text-body navbar-team-link" onClick={openTeamModal}>
                         {user.name}
@@ -287,107 +248,107 @@ function Navbar(): JSX.Element {
 
       <Modal show={showTeamModal} onHide={() => setShowTeamModal(false)} centered size="lg">
         <Modal.Header closeButton>
-          <Modal.Title>{t('teamProfileTitle')}</Modal.Title>
+          <Modal.Title>{t('teamFlagSubmissionsTitle')}</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           {teamError && <Alert variant="danger">{teamError}</Alert>}
-          {teamSuccess && <Alert variant="success">{teamSuccess}</Alert>}
+          {teamModalLoading ? <p className="mb-0">{t('loading')}</p> : null}
+          {!teamModalLoading && teamSubmissions.length === 0 ? (
+            <p className="mb-0 text-secondary">{t('dashboardSubmissionNoHistory')}</p>
+          ) : null}
+          {!teamModalLoading && teamSubmissions.length > 0 ? (
+            <Table striped bordered hover responsive className="warm-table mb-0">
+              <thead>
+                <tr>
+                  <th>{t('managerTableId')}</th>
+                  <th>{t('dashboardFlagLabel')}</th>
+                  <th>{t('managerTableDifficulty')}</th>
+                  <th>{t('adminTeamDetailsResult')}</th>
+                  <th>{t('adminTeamDetailsPoints')}</th>
+                  <th>{t('adminTeamDetailsSubmittedAt')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {teamSubmissions.map((submission) => (
+                  <tr key={submission.id}>
+                    <td>{submission.challenge_public_id || '-'}</td>
+                    <td>{submission.submitted_flag}</td>
+                    <td>
+                      {submission.challenge_difficulty === 'hard'
+                        ? t('difficultyHard')
+                        : submission.challenge_difficulty === 'medium'
+                          ? t('difficultyMedium')
+                          : t('difficultyEasy')}
+                    </td>
+                    <td>{submission.is_correct ? t('adminTeamDetailsCorrect') : t('adminTeamDetailsWrong')}</td>
+                    <td>{submission.awarded_points || 0}</td>
+                    <td>{new Date(submission.submitted_at).toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          ) : null}
+        </Modal.Body>
+      </Modal>
 
-          <Form onSubmit={handleSaveTeamName} className="mb-4">
-            <Form.Label>{t('teamProfileName')}</Form.Label>
-            <div className="d-flex gap-2">
-              <Form.Control value={teamName} onChange={(e) => setTeamName(e.target.value)} required />
-              <Button type="submit" variant="primary">
-                {t('teamProfileSaveName')}
-              </Button>
-            </div>
-          </Form>
-
-          <h6 className="section-title mb-2">{t('teamProfileMembers')}</h6>
-          <p className="text-secondary small mb-2">{t('teamProfileMembersHint', { count: memberCount, max: maxMembers })}</p>
-          <div className="team-members-list mb-3">
-            {members.map((member) => (
-              <div key={member.id} className="team-member-pill d-flex align-items-center gap-2">
-                {editingMemberId === member.id ? (
-                  <>
-                    <Form.Control
-                      size="sm"
-                      value={editingMemberUsername}
-                      onChange={(e) => setEditingMemberUsername(e.target.value)}
-                      className="team-member-edit-input"
-                    />
-                    <Button
-                      size="sm"
-                      variant="success"
-                      className="team-member-icon-btn"
-                      onClick={() => void handleSaveMemberEdit(member.id)}
-                      title={t('teamProfileSaveMember')}
-                      aria-label={t('teamProfileSaveMember')}
-                    >
-                      <span aria-hidden="true">✓</span>
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline-secondary"
-                      className="team-member-icon-btn"
-                      onClick={cancelEditMember}
-                      title={t('teamProfileCancel')}
-                      aria-label={t('teamProfileCancel')}
-                    >
-                      <span aria-hidden="true">✕</span>
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    <span>{member.username}</span>
-                    {member.is_primary === 1 ? (
-                      <Badge bg="secondary">{t('teamProfileTeamNameTag')}</Badge>
-                    ) : (
-                      <div className="d-flex align-items-center gap-1">
-                        <Button
-                          size="sm"
-                          variant="outline-secondary"
-                          className="team-member-icon-btn"
-                          onClick={() => beginEditMember(member)}
-                          title={t('teamProfileEditMember')}
-                          aria-label={t('teamProfileEditMember')}
-                        >
-                          <span aria-hidden="true">✎</span>
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline-danger"
-                          className="team-member-icon-btn"
-                          onClick={() => void handleDeleteMember(member)}
-                          title={t('teamProfileDeleteMember')}
-                          aria-label={t('teamProfileDeleteMember')}
-                        >
-                          <span aria-hidden="true">🗑</span>
-                        </Button>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            ))}
-          </div>
-
-          <Form onSubmit={handleAddMember}>
-            <Form.Label>{t('teamProfileAddMember')}</Form.Label>
-            <div className="d-flex gap-2">
+      <Modal show={showAdminMailModal} onHide={() => setShowAdminMailModal(false)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>{t('adminSenderConfigTitle')}</Modal.Title>
+        </Modal.Header>
+        <Form onSubmit={handleSaveAdminMailConfig}>
+          <Modal.Body>
+            {adminMailError ? <Alert variant="danger">{adminMailError}</Alert> : null}
+            {adminMailSuccess ? <Alert variant="success">{adminMailSuccess}</Alert> : null}
+            <Form.Group className="mb-3">
+              <Form.Label>{t('adminSenderEmailLabel')}</Form.Label>
               <Form.Control
-                value={newMemberUsername}
-                onChange={(e) => setNewMemberUsername(e.target.value)}
-                placeholder={t('teamProfileUsernamePlaceholder')}
-                disabled={memberCount >= maxMembers}
+                type="email"
+                value={adminSenderEmail}
+                onChange={(e) => setAdminSenderEmail(e.target.value)}
+                placeholder="admin@selection.hiu"
                 required
               />
-              <Button type="submit" variant="success" disabled={memberCount >= maxMembers}>
-                +
-              </Button>
-            </div>
-          </Form>
-        </Modal.Body>
+            </Form.Group>
+            <Form.Group>
+              <Form.Label>{t('adminSenderPasswordLabel')}</Form.Label>
+              <InputGroup>
+                <Form.Control
+                  type={showAdminSenderPassword ? 'text' : 'password'}
+                  value={adminSenderPassword}
+                  onChange={(e) => setAdminSenderPassword(e.target.value)}
+                  required
+                />
+                <Button
+                  variant="outline-secondary"
+                  type="button"
+                  onClick={() => setShowAdminSenderPassword((prev) => !prev)}
+                  aria-label={showAdminSenderPassword ? t('hidePassword') : t('showPassword')}
+                  title={showAdminSenderPassword ? t('hidePassword') : t('showPassword')}
+                >
+                  {showAdminSenderPassword ? '🙈' : '👁'}
+                </Button>
+              </InputGroup>
+            </Form.Group>
+            <Form.Group className="mt-3">
+              <Form.Label>{t('adminOvaLinkLabel')}</Form.Label>
+              <Form.Control
+                type="url"
+                value={adminOvaLink}
+                onChange={(e) => setAdminOvaLink(e.target.value)}
+                placeholder="https://drive.google.com"
+                required
+              />
+            </Form.Group>
+          </Modal.Body>
+          <Modal.Footer>
+            <Button variant="secondary" onClick={() => setShowAdminMailModal(false)} disabled={adminMailLoading}>
+              {t('managerCancel')}
+            </Button>
+            <Button variant="primary" type="submit" disabled={adminMailLoading}>
+              {t('adminSenderSave')}
+            </Button>
+          </Modal.Footer>
+        </Form>
       </Modal>
     </>
   );

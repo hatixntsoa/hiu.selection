@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { Alert, Button, Card, Col, Container, Form, Row, Tab, Tabs } from 'react-bootstrap';
+import { Alert, Button, Card, Col, Container, Form, InputGroup, Row, Tab, Tabs } from 'react-bootstrap';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { usePreferences } from '../context/PreferencesContext';
@@ -10,17 +10,18 @@ type FormData = {
 };
 
 function LoginPage(): JSX.Element {
-  const { login, register, user } = useAuth();
+  const { login, /* register, */ user } = useAuth();
   const { t, localizeApiMessage } = usePreferences();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const initialTab = useMemo(() => (searchParams.get('tab') === 'register' ? 'register' : 'login'), [searchParams]);
+  const initialTab = useMemo(() => 'login', [searchParams]);
 
   const [activeTab, setActiveTab] = useState<string>(initialTab);
   const [formData, setFormData] = useState<FormData>({
     name: '',
     password: ''
   });
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -47,20 +48,20 @@ function LoginPage(): JSX.Element {
     }
   };
 
-  const handleRegister = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
-
-    try {
-      const registeredUser = await register(formData.name, formData.password);
-      navigate(registeredUser.isAdmin ? '/admin' : '/dashboard');
-    } catch (err: any) {
-      setError(localizeApiMessage(err.response?.data?.error || t('authErrorRegistrationFailed')));
-    } finally {
-      setLoading(false);
-    }
-  };
+  // const handleRegister = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
+  //   e.preventDefault();
+  //   setError('');
+  //   setLoading(true);
+  //
+  //   try {
+  //     const registeredUser = await register(formData.name, formData.password);
+  //     navigate(registeredUser.isAdmin ? '/admin' : '/dashboard');
+  //   } catch (err: any) {
+  //     setError(localizeApiMessage(err.response?.data?.error || t('authErrorRegistrationFailed')));
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
 
   return (
     <Container>
@@ -96,14 +97,25 @@ function LoginPage(): JSX.Element {
                     </Form.Group>
                     <Form.Group className="mb-3">
                       <Form.Label>{t('loginPassword')}</Form.Label>
-                      <Form.Control
-                        type="password"
-                        name="password"
-                        placeholder={t('loginPasswordPlaceholder')}
-                        value={formData.password}
-                        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                        required
-                      />
+                      <InputGroup>
+                        <Form.Control
+                          type={showPassword ? 'text' : 'password'}
+                          name="password"
+                          placeholder={t('loginPasswordPlaceholder')}
+                          value={formData.password}
+                          onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                          required
+                        />
+                        <Button
+                          variant="outline-secondary"
+                          type="button"
+                          onClick={() => setShowPassword((prev) => !prev)}
+                          aria-label={showPassword ? t('hidePassword') : t('showPassword')}
+                          title={showPassword ? t('hidePassword') : t('showPassword')}
+                        >
+                          {showPassword ? '🙈' : '👁'}
+                        </Button>
+                      </InputGroup>
                     </Form.Group>
                     {error && <Alert variant="danger">{error}</Alert>}
                     <Button variant="primary" type="submit" className="w-100" disabled={loading}>
@@ -111,7 +123,7 @@ function LoginPage(): JSX.Element {
                     </Button>
                   </Form>
                 </Tab>
-                <Tab eventKey="register" title={t('registerTab')}>
+                {/* <Tab eventKey="register" title={t('registerTab')}>
                   <Form onSubmit={handleRegister}>
                     <Form.Group className="mb-3">
                       <Form.Label>{t('registerTeamName')}</Form.Label>
@@ -141,7 +153,7 @@ function LoginPage(): JSX.Element {
                       {loading ? t('registerButtonLoading') : t('registerButton')}
                     </Button>
                   </Form>
-                </Tab>
+                </Tab> */}
               </Tabs>
             </Card.Body>
           </Card>

@@ -10,6 +10,14 @@ const ADMIN_USERNAME = 'admin';
 const ADMIN_EMAIL = 'admin@ctf.local';
 const ADMIN_PASSWORD_CONFIG_KEY = 'admin_plain_password';
 const ADMIN_PASSWORD_LENGTH = 16;
+const ADMIN_SENDER_EMAIL_CONFIG_KEY = 'admin_sender_email';
+const ADMIN_SENDER_APP_PASSWORD_CONFIG_KEY = 'admin_sender_app_password';
+const ADMIN_OVA_LINK_CONFIG_KEY = 'admin_ova_link';
+const DEFAULT_ADMIN_SENDER_EMAIL = 'admin@selection.hiu';
+const DEFAULT_ADMIN_OVA_LINK = 'https://drive.google.com';
+const DEFAULT_TIMER_DURATION_SECONDS = 6 * 60 * 60;
+const DEFAULT_TEAM_COUNT = 15;
+const DEFAULT_TEAM_PASSWORD_LENGTH = 20;
 const EASY_FIRST_BLOOD_POINTS = 100;
 const EASY_SECOND_BLOOD_POINTS = 75;
 const EASY_THIRD_BLOOD_POINTS = 50;
@@ -29,6 +37,18 @@ function generateSecurePassword(): string {
     password += alphabet[crypto.randomInt(alphabet.length)];
   }
   return password;
+}
+
+function toTeamEmail(teamName: string): string {
+  return `${teamName.toLowerCase()}@ctf.local`;
+}
+
+function generateHexPassword(length: number): string {
+  return crypto.randomBytes(Math.ceil(length / 2)).toString('hex').slice(0, length);
+}
+
+function defaultTeamPassword(): string {
+  return generateHexPassword(DEFAULT_TEAM_PASSWORD_LENGTH);
 }
 
 export function getDatabase(): sqlite3.Database {
@@ -74,16 +94,49 @@ function initializeDatabase(): void {
       )
     `);
 
-    db!.all<{ name: string }>('PRAGMA table_info(teams)', [], (pragmaErr, columns) => {
-      if (pragmaErr) {
-        console.error('Error checking teams schema:', pragmaErr);
-        return;
-      }
-      const hasMemberCount = columns.some((column) => column.name === 'member_count');
-      if (!hasMemberCount) {
-        db!.run('ALTER TABLE teams ADD COLUMN member_count INTEGER DEFAULT 1');
+    db!.run('ALTER TABLE teams ADD COLUMN member_count INTEGER DEFAULT 1', (alterErr) => {
+      if (alterErr && !alterErr.message.includes('duplicate column name')) {
+        console.error('Error ensuring teams.member_count:', alterErr);
       }
     });
+    db!.run('ALTER TABLE teams ADD COLUMN team_leader_email TEXT', (alterErr) => {
+      if (alterErr && !alterErr.message.includes('duplicate column name')) {
+        console.error('Error ensuring teams.team_leader_email:', alterErr);
+      }
+    });
+    db!.run('ALTER TABLE teams ADD COLUMN team_plain_password TEXT', (alterErr) => {
+      if (alterErr && !alterErr.message.includes('duplicate column name')) {
+        console.error('Error ensuring teams.team_plain_password:', alterErr);
+      }
+    });
+
+    db!.run(
+      `UPDATE teams
+       SET team_leader_email = LOWER(name) || '_leader@example.com'
+       WHERE is_admin = 0 AND (team_leader_email IS NULL OR LENGTH(TRIM(team_leader_email)) = 0)`
+    );
+
+    db!.all<{ id: number }>(
+      `SELECT id
+       FROM teams
+       WHERE is_admin = 0 AND (team_plain_password IS NULL OR LENGTH(TRIM(team_plain_password)) = 0)`,
+      [],
+      (lookupPasswordErr, teamsMissingPassword) => {
+        if (lookupPasswordErr) {
+          console.error('Error checking missing team plain passwords:', lookupPasswordErr);
+          return;
+        }
+        teamsMissingPassword.forEach((row) => {
+          const generatedPassword = defaultTeamPassword();
+          const generatedHash = bcrypt.hashSync(generatedPassword, 10);
+          db!.run('UPDATE teams SET password = ?, team_plain_password = ? WHERE id = ?', [generatedHash, generatedPassword, row.id], (syncErr) => {
+            if (syncErr) {
+              console.error('Error syncing team plain passwords:', syncErr);
+            }
+          });
+        });
+      }
+    );
 
     db!.run(`
       CREATE TABLE IF NOT EXISTS team_members (
@@ -362,7 +415,7 @@ function initializeDatabase(): void {
         id INTEGER PRIMARY KEY CHECK (id = 1),
         is_active INTEGER NOT NULL DEFAULT 0,
         is_infinite INTEGER NOT NULL DEFAULT 0,
-        duration_seconds INTEGER NOT NULL DEFAULT 7200,
+        duration_seconds INTEGER NOT NULL DEFAULT ${DEFAULT_TIMER_DURATION_SECONDS},
         started_at DATETIME DEFAULT NULL,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
@@ -370,7 +423,7 @@ function initializeDatabase(): void {
 
     db!.run(
       `INSERT OR IGNORE INTO ctf_timer (id, is_active, is_infinite, duration_seconds, started_at)
-       VALUES (1, 0, 0, 7200, NULL)`
+       VALUES (1, 0, 0, ${DEFAULT_TIMER_DURATION_SECONDS}, NULL)`
     );
 
     db!.run(`
@@ -379,6 +432,40 @@ function initializeDatabase(): void {
         value TEXT NOT NULL
       )
     `);
+
+    const defaultSenderAppPassword = defaultTeamPassword();
+    db!.run(
+      `INSERT OR IGNORE INTO app_config (key, value) VALUES (?, ?)`,
+      [ADMIN_SENDER_EMAIL_CONFIG_KEY, DEFAULT_ADMIN_SENDER_EMAIL]
+    );
+    db!.run(
+      `INSERT OR IGNORE INTO app_config (key, value) VALUES (?, ?)`,
+      [ADMIN_SENDER_APP_PASSWORD_CONFIG_KEY, defaultSenderAppPassword]
+    );
+    db!.run(
+      `INSERT OR IGNORE INTO app_config (key, value) VALUES (?, ?)`,
+      [ADMIN_OVA_LINK_CONFIG_KEY, DEFAULT_ADMIN_OVA_LINK]
+    );
+
+    for (let index = 1; index <= DEFAULT_TEAM_COUNT; index += 1) {
+      const teamName = `team${index}`;
+      const plainPassword = defaultTeamPassword();
+      const hashedPassword = bcrypt.hashSync(plainPassword, 10);
+      const leaderEmail = `${teamName.toLowerCase()}_leader@example.com`;
+      db!.run(
+        `INSERT INTO teams (name, email, password, team_plain_password, team_leader_email, score, member_count, is_admin)
+         SELECT ?, ?, ?, ?, ?, 0, 0, 0
+         WHERE NOT EXISTS (
+           SELECT 1 FROM teams WHERE name = ? COLLATE NOCASE
+         )`,
+        [teamName, toTeamEmail(teamName), hashedPassword, plainPassword, leaderEmail, teamName],
+        (seedErr) => {
+          if (seedErr) {
+            console.error('Error seeding default teams:', seedErr);
+          }
+        }
+      );
+    }
 
     const persistAndPrintAdminPassword = (password: string): void => {
       db!.run(
@@ -447,8 +534,8 @@ function initializeDatabase(): void {
 
           if (reservedNameTeam) {
             db!.run(
-              'UPDATE teams SET email = ?, password = ?, is_admin = 1 WHERE id = ?',
-              [ADMIN_EMAIL, hashedPassword, reservedNameTeam.id],
+              'UPDATE teams SET email = ?, password = ?, team_plain_password = ?, is_admin = 1 WHERE id = ?',
+              [ADMIN_EMAIL, hashedPassword, generatedPassword, reservedNameTeam.id],
               (promoteErr) => {
                 if (promoteErr) {
                   console.error('Error promoting reserved admin account:', promoteErr);
@@ -462,9 +549,9 @@ function initializeDatabase(): void {
           }
 
           db!.run(
-            `INSERT INTO teams (name, email, password, is_admin, score, member_count)
-             VALUES (?, ?, ?, 1, 0, 0)`,
-            [ADMIN_USERNAME, ADMIN_EMAIL, hashedPassword],
+            `INSERT INTO teams (name, email, password, team_plain_password, is_admin, score, member_count)
+             VALUES (?, ?, ?, ?, 1, 0, 0)`,
+            [ADMIN_USERNAME, ADMIN_EMAIL, hashedPassword, generatedPassword],
             (insertAdminErr) => {
               if (insertAdminErr) {
                 console.error('Error creating admin account:', insertAdminErr);

@@ -118,12 +118,9 @@ function HomePage(): JSX.Element {
               <Link className="btn btn-primary btn-lg" to="/auth?tab=login">
                 {t('homeLoginToPlay')}
               </Link>
-              <Link className="btn btn-outline-primary btn-lg" to="/auth?tab=register">
-                {t('homeRegisterTeam')}
-              </Link>
             </div>
           ) : (
-            <Link className="btn btn-primary btn-lg" to="/dashboard/scoreboard">
+            <Link className="btn btn-primary btn-lg" to="/dashboard/ranking">
               {t('homeGoToDashboard')}
             </Link>
           )}

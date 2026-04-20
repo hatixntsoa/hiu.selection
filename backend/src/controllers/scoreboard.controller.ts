@@ -14,6 +14,8 @@ type ScoreboardTeam = {
   name: string;
   score: number;
   created_at: string;
+  team_leader_email?: string | null;
+  rank?: number | null;
 };
 
 type ActivityRow = {
@@ -30,17 +32,29 @@ export function getScoreboard(_req: Request, res: Response): Response | void {
   const db = getDatabase();
 
   db.all<ScoreboardTeam>(
-    'SELECT id, name, score, created_at FROM teams WHERE is_admin = 0 ORDER BY score DESC, created_at ASC',
+    `SELECT id, name, score, created_at
+            , team_leader_email
+     FROM teams
+     WHERE is_admin = 0
+     ORDER BY
+       CASE WHEN score > 0 THEN 0 ELSE 1 END ASC,
+       score DESC,
+       LOWER(name) ASC,
+       created_at ASC`,
     [],
     (err, teams) => {
       if (err) {
         return res.status(500).json({ error: 'Database error' });
       }
 
-      const scoreboard = teams.map((team, index) => ({
-        ...team,
-        rank: index + 1
-      }));
+      let rankedCounter = 0;
+      const scoreboard = teams.map((team) => {
+        if (team.score > 0) {
+          rankedCounter += 1;
+          return { ...team, rank: rankedCounter };
+        }
+        return { ...team, rank: null };
+      });
 
       res.json({ scoreboard });
     }

@@ -7,11 +7,12 @@ function LiveScoreboard({ teams, fullscreen = false }: { teams: ScoreboardTeam[]
   const { t } = usePreferences();
   const scoreboardRef = useRef<HTMLDivElement | null>(null);
   const podiumRef = useRef<HTMLDivElement | null>(null);
-  const sorted = [...teams].sort((a, b) => a.rank - b.rank);
-  const first = sorted.find((team) => team.rank === 1);
-  const second = sorted.find((team) => team.rank === 2);
-  const third = sorted.find((team) => team.rank === 3);
-  const others = sorted.filter((team) => team.rank > 3);
+  const rankedTeams = [...teams].filter((team) => team.rank !== null).sort((a, b) => Number(a.rank) - Number(b.rank));
+  const unrankedTeams = [...teams].filter((team) => team.rank === null);
+  const first = rankedTeams.find((team) => team.rank === 1);
+  const second = rankedTeams.find((team) => team.rank === 2);
+  const third = rankedTeams.find((team) => team.rank === 3);
+  const others = [...rankedTeams.filter((team) => Number(team.rank) > 3), ...unrankedTeams];
   const [rowsPerColumn, setRowsPerColumn] = useState(8);
 
   useEffect(() => {
@@ -43,7 +44,7 @@ function LiveScoreboard({ teams, fullscreen = false }: { teams: ScoreboardTeam[]
     return columns;
   }, [others, rowsPerColumn]);
 
-  if (sorted.length === 0) {
+  if (teams.length === 0) {
     return <p className="text-secondary text-center mb-0">{t('adminLiveNoTeams')}</p>;
   }
 
@@ -95,7 +96,7 @@ function LiveScoreboard({ teams, fullscreen = false }: { teams: ScoreboardTeam[]
               <Card.Body className="py-2">
                 {column.map((team) => (
                   <div key={team.id} className="live-score-row">
-                    <div className="live-score-rank">#{team.rank}</div>
+                    <div className="live-score-rank">{team.rank ? `#${team.rank}` : ''}</div>
                     <div className="live-score-name">{team.name}</div>
                     <div className="live-score-points">{team.score} pts</div>
                   </div>

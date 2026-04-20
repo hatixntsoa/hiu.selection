@@ -9,6 +9,8 @@ export interface TeamRow {
   name: string;
   email: string;
   password: string;
+  team_leader_email?: string | null;
+  team_plain_password?: string | null;
   score: number;
   member_count: number;
   is_admin: number;

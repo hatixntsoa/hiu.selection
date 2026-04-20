@@ -14,7 +14,7 @@ type FlagResult = {
   points: number;
 };
 
-type DashboardSection = 'ranking' | 'scoreboard' | 'live-activity' | 'submission';
+type DashboardSection = 'ranking' | 'live-activity' | 'submission';
 
 async function celebrateSolve(): Promise<void> {
   const { default: confetti } = await import('canvas-confetti');
@@ -89,7 +89,7 @@ async function celebrateSolve(): Promise<void> {
 function DashboardPage(): JSX.Element {
   const { section } = useParams<{ section: string }>();
   const currentSection: DashboardSection = useMemo(() => {
-    const allowed: DashboardSection[] = ['ranking', 'scoreboard', 'live-activity', 'submission'];
+    const allowed: DashboardSection[] = ['ranking', 'live-activity', 'submission'];
     return allowed.includes(section as DashboardSection) ? (section as DashboardSection) : 'ranking';
   }, [section]);
 
@@ -163,6 +163,17 @@ function DashboardPage(): JSX.Element {
   }, []);
 
   useEffect(() => {
+    if (!result && !error) {
+      return;
+    }
+    const timeout = window.setTimeout(() => {
+      setResult(null);
+      setError('');
+    }, 5000);
+    return () => window.clearTimeout(timeout);
+  }, [result, error]);
+
+  useEffect(() => {
     const interval = window.setInterval(() => {
       api
         .get('/scoreboard/timer')
@@ -210,7 +221,7 @@ function DashboardPage(): JSX.Element {
   const solvedPoints = challenges
     .filter((c) => solvedChallenges.has(c.id))
     .reduce((sum, c) => sum + Number(c.default_points || 50), 0);
-  const rank = scoreboard.findIndex((team) => team.id === user?.id) + 1;
+  const currentTeamRank = scoreboard.find((team) => team.id === user?.id)?.rank ?? null;
   const challengesDisabled = Boolean(timer && !timer.canSubmit);
   const challengeDisabledMessage = timer && !timer.isActive ? t('dashboardChallengesNotStarted') : t('dashboardChallengesClosed');
   return (
@@ -246,25 +257,22 @@ function DashboardPage(): JSX.Element {
           <Col md={3}>
             <Card className="soft-card">
               <Card.Body className="text-center">
-                <h1 className="text-info">{rank || '-'}</h1>
+                <h1 className="text-info">{currentTeamRank ?? '-'}</h1>
                 <p className="text-secondary mb-0">{t('dashboardRank')}</p>
               </Card.Body>
             </Card>
           </Col>
+          <Col xs={12}>
+            <Card className="soft-card">
+              <Card.Header>
+                <h5 className="mb-0">{t('dashboardScoreboard')}</h5>
+              </Card.Header>
+              <Card.Body style={{ maxHeight: '560px', overflowY: 'auto' }}>
+                <Scoreboard scoreboard={scoreboard} currentUserId={user?.id} />
+              </Card.Body>
+            </Card>
+          </Col>
         </Row>
-      )}
-
-      {currentSection === 'scoreboard' && (
-        <Card className="soft-card mt-1">
-          <Card.Header>
-            <h5 className="mb-0">
-              <span className="live-indicator text-success">●</span> {t('dashboardScoreboard')}
-            </h5>
-          </Card.Header>
-          <Card.Body>
-            <Scoreboard scoreboard={scoreboard} currentUserId={user?.id} />
-          </Card.Body>
-        </Card>
       )}
 
       {currentSection === 'live-activity' && (

@@ -10,6 +10,8 @@ type TimerRow = {
   started_at_epoch?: number | null;
 };
 
+const DEFAULT_TIMER_DURATION_SECONDS = 6 * 60 * 60;
+
 export type CtfTimerState = {
   isActive: boolean;
   isInfinite: boolean;
@@ -50,7 +52,7 @@ function get<T>(query: string, params: Array<string | number | null> = []): Prom
 async function ensureTimerRow(): Promise<void> {
   await run(
     `INSERT OR IGNORE INTO ctf_timer (id, is_active, is_infinite, duration_seconds, started_at, updated_at)
-     VALUES (1, 0, 0, 7200, NULL, CURRENT_TIMESTAMP)`
+     VALUES (1, 0, 0, ${DEFAULT_TIMER_DURATION_SECONDS}, NULL, CURRENT_TIMESTAMP)`
   );
 }
 
@@ -145,7 +147,7 @@ export async function getCtfTimerState(): Promise<CtfTimerState> {
     return {
       isActive: false,
       isInfinite: false,
-      durationSeconds: 7200,
+      durationSeconds: DEFAULT_TIMER_DURATION_SECONDS,
       startedAt: null,
       endsAt: null,
       timeLeftSeconds: null,

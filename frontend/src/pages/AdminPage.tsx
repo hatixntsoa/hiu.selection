@@ -1,30 +1,44 @@
-import { useEffect, useRef, useState } from 'react';
-import { Alert, Button, Card, Container, Modal, Table } from 'react-bootstrap';
+import { FormEvent, useEffect, useRef, useState } from 'react';
+import { Alert, Button, Card, Container, Form, InputGroup, Modal, Table } from 'react-bootstrap';
 import { useParams } from 'react-router-dom';
 import api from '../services/api';
 import FlagManager from '../components/Admin/FlagManager';
 import LiveScoreboard from '../components/Admin/LiveScoreboard';
 import TimerManager from '../components/Admin/TimerManager';
-import { AdminTeamDetails, Challenge, CtfTimerState, ScoreboardTeam } from '../types';
+import LiveFeed from '../components/Dashboard/LiveFeed';
+import { ActivityItem, AdminTeamDetails, Challenge, CtfTimerState, ScoreboardTeam } from '../types';
 import { usePreferences } from '../context/PreferencesContext';
 
 function AdminPage(): JSX.Element {
   const { section } = useParams<{ section?: string }>();
   const [teams, setTeams] = useState<ScoreboardTeam[]>([]);
   const [challenges, setChallenges] = useState<Challenge[]>([]);
+  const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [timer, setTimer] = useState<CtfTimerState | null>(null);
   const [showDeleteTeamModal, setShowDeleteTeamModal] = useState(false);
   const [deletingTeam, setDeletingTeam] = useState<ScoreboardTeam | null>(null);
   const [deleteTeamError, setDeleteTeamError] = useState('');
+  const [showEditTeamModal, setShowEditTeamModal] = useState(false);
+  const [editingTeam, setEditingTeam] = useState<ScoreboardTeam | null>(null);
+  const [editTeamName, setEditTeamName] = useState('');
+  const [editTeamPassword, setEditTeamPassword] = useState('');
+  const [editTeamLeaderEmail, setEditTeamLeaderEmail] = useState('');
+  const [showEditTeamPassword, setShowEditTeamPassword] = useState(false);
+  const [editTeamError, setEditTeamError] = useState('');
+  const [editTeamSuccess, setEditTeamSuccess] = useState('');
+  const [editTeamLoading, setEditTeamLoading] = useState(false);
+  const [sharedTeamEmailState, setSharedTeamEmailState] = useState<Record<number, string>>({});
   const [showTeamDetailsModal, setShowTeamDetailsModal] = useState(false);
   const [teamDetails, setTeamDetails] = useState<AdminTeamDetails | null>(null);
   const [teamDetailsLoading, setTeamDetailsLoading] = useState(false);
   const [teamDetailsError, setTeamDetailsError] = useState('');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const liveScoreboardRef = useRef<HTMLDivElement | null>(null);
-  const { t, language } = usePreferences();
+  const { t, language, localizeApiMessage } = usePreferences();
   const currentSection =
-    section === 'teams' || section === 'timer' || section === 'live-scoreboard' || section === 'scoreboard' ? section : 'flags';
+    section === 'teams' || section === 'activity' || section === 'timer' || section === 'live-scoreboard' || section === 'scoreboard'
+      ? section
+      : 'flags';
   const isLiveScoreboardRoute = currentSection === 'live-scoreboard';
   const liveTimerLabel = timer?.isInfinite
     ? t('timerInfinite')
@@ -45,14 +59,16 @@ function AdminPage(): JSX.Element {
 
   const fetchData = async (): Promise<void> => {
     try {
-      const [scoreboardRes, timerRes, challengesRes] = await Promise.all([
+      const [scoreboardRes, timerRes, challengesRes, activityRes] = await Promise.all([
         api.get('/scoreboard'),
         api.get('/scoreboard/timer'),
-        api.get('/challenges')
+        api.get('/challenges'),
+        api.get('/scoreboard/activity')
       ]);
       setTeams(scoreboardRes.data.scoreboard as ScoreboardTeam[]);
       setTimer(timerRes.data.timer as CtfTimerState);
       setChallenges(challengesRes.data.challenges as Challenge[]);
+      setActivity(activityRes.data.activities as ActivityItem[]);
     } catch (err) {
       console.error('Error fetching data:', err);
     }
@@ -94,6 +110,85 @@ function AdminPage(): JSX.Element {
     setDeleteTeamError('');
     setDeletingTeam(team);
     setShowDeleteTeamModal(true);
+  };
+
+  const openEditTeamModal = (team: ScoreboardTeam): void => {
+    setEditingTeam(team);
+    setEditTeamName(team.name);
+    setEditTeamPassword('');
+    setEditTeamLeaderEmail('');
+    setShowEditTeamPassword(false);
+    setEditTeamError('');
+    setEditTeamSuccess('');
+    setEditTeamLoading(false);
+    setShowEditTeamModal(true);
+    void api
+      .get(`/auth/admin/teams/${team.id}/edit`)
+      .then((response) => {
+        setEditTeamName(String(response.data.team?.name || team.name));
+        setEditTeamPassword(String(response.data.password || ''));
+        setEditTeamLeaderEmail(String(response.data.team?.teamLeaderEmail || ''));
+      })
+      .catch((err) => {
+        const error = err as { response?: { data?: { error?: string } } };
+        setEditTeamError(localizeApiMessage(error.response?.data?.error || t('adminTeamDetailsFailed')));
+      });
+  };
+
+  const closeEditTeamModal = (): void => {
+    setShowEditTeamModal(false);
+    setEditingTeam(null);
+    setEditTeamName('');
+    setEditTeamPassword('');
+    setEditTeamLeaderEmail('');
+    setShowEditTeamPassword(false);
+    setEditTeamError('');
+    setEditTeamSuccess('');
+    setEditTeamLoading(false);
+  };
+
+  const handleEditTeam = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
+    e.preventDefault();
+    if (!editingTeam) {
+      return;
+    }
+
+    setEditTeamError('');
+    setEditTeamSuccess('');
+    setEditTeamLoading(true);
+    try {
+      const response = await api.put(`/auth/admin/teams/${editingTeam.id}`, {
+        name: editTeamName.trim(),
+        password: editTeamPassword,
+        teamLeaderEmail: editTeamLeaderEmail.trim()
+      });
+      setEditTeamSuccess(localizeApiMessage(response.data.message || 'Team updated by admin'));
+      setSharedTeamEmailState((prev) => {
+        const current = prev[editingTeam.id];
+        const next = editTeamLeaderEmail.trim().toLowerCase();
+        if (!current || current === next) {
+          return prev;
+        }
+        const copy = { ...prev };
+        delete copy[editingTeam.id];
+        return copy;
+      });
+      await fetchData();
+    } catch (err) {
+      const error = err as { response?: { data?: { error?: string } } };
+      setEditTeamError(localizeApiMessage(error.response?.data?.error || t('adminTeamUpdateFailed')));
+    } finally {
+      setEditTeamLoading(false);
+    }
+  };
+
+  const handleShareTeam = async (team: ScoreboardTeam): Promise<void> => {
+    try {
+      await api.post(`/auth/admin/teams/${team.id}/share`);
+      setSharedTeamEmailState((prev) => ({ ...prev, [team.id]: String(team.team_leader_email || '').toLowerCase() }));
+    } catch {
+      // handled by global notifications
+    }
   };
 
   const handleDeleteTeam = async (): Promise<void> => {
@@ -172,7 +267,10 @@ function AdminPage(): JSX.Element {
     return Number.isInteger(normalized) ? String(normalized) : normalized.toFixed(2);
   };
 
-  const rankLabel = (rank: number): string | number => {
+  const rankLabel = (rank: number | null): string | number => {
+    if (!rank) {
+      return '-';
+    }
     if (rank === 1) {
       return '🥇';
     }
@@ -192,8 +290,12 @@ function AdminPage(): JSX.Element {
     ]);
 
     const rows = [...teams]
-      .sort((a, b) => a.rank - b.rank)
-      .map((team) => [String(team.rank), team.name, String(team.score), formatOverThirty(team.score)]);
+      .sort((a, b) => {
+        const rankA = a.rank ?? Number.MAX_SAFE_INTEGER;
+        const rankB = b.rank ?? Number.MAX_SAFE_INTEGER;
+        return rankA - rankB;
+      })
+      .map((team) => [team.rank ? String(team.rank) : '-', team.name, String(team.score), formatOverThirty(team.score)]);
 
     const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
     doc.setFontSize(16);
@@ -285,21 +387,38 @@ function AdminPage(): JSX.Element {
                     <th>{t('adminTeamName')}</th>
                     <th>{t('adminScore')}</th>
                     <th>{t('adminRegistered')}</th>
-                    <th>{t('managerTableActions')}</th>
+                    <th style={{ width: '1%', whiteSpace: 'nowrap' }}>{t('managerTableActions')}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {teams.map((team, index) => (
+                  {teams.map((team) => (
                     <tr key={team.id}>
-                      <td>#{index + 1}</td>
+                      <td>{rankLabel(team.rank)}</td>
                       <td>{team.name}</td>
                       <td>
                         <strong>{team.score}</strong>
                       </td>
                       <td>{team.created_at ? new Date(team.created_at).toLocaleDateString(language === 'fr' ? 'fr-FR' : 'en-US') : '-'}</td>
-                      <td>
+                      <td style={{ whiteSpace: 'nowrap' }}>
+                        {(() => {
+                          const leaderEmail = String(team.team_leader_email || '').toLowerCase();
+                          const isShared = leaderEmail.length > 0 && sharedTeamEmailState[team.id] === leaderEmail;
+                          return (
+                            <>
+                        <Button variant="primary" size="sm" className="me-2" onClick={() => openEditTeamModal(team)}>
+                          {t('managerEdit')}
+                        </Button>
                         <Button variant="outline-secondary" size="sm" className="me-2" onClick={() => void openTeamDetailsModal(team)}>
                           {t('adminView')}
+                        </Button>
+                        <Button
+                          variant={isShared ? 'success' : 'outline-primary'}
+                          size="sm"
+                          className="me-2"
+                          onClick={() => void handleShareTeam(team)}
+                          disabled={isShared}
+                        >
+                          {isShared ? t('adminTeamShared') : t('adminTeamShare')}
                         </Button>
                         <Button
                           variant="danger"
@@ -308,6 +427,9 @@ function AdminPage(): JSX.Element {
                         >
                           {t('managerDelete')}
                         </Button>
+                            </>
+                          );
+                        })()}
                       </td>
                     </tr>
                   ))}
@@ -315,11 +437,76 @@ function AdminPage(): JSX.Element {
               </Table>
             </Card.Body>
           </Card>
+      ) : currentSection === 'activity' ? (
+          <Card className="mt-3 soft-card">
+            <Card.Header>
+              <h5 className="mb-0 section-title">{t('adminTabActivity')}</h5>
+            </Card.Header>
+            <Card.Body>
+              <LiveFeed activity={activity} />
+            </Card.Body>
+          </Card>
       ) : (
           <div className="mt-3">
             <TimerManager timer={timer} onTimerChange={setTimer} />
           </div>
       )}
+
+      <Modal show={showEditTeamModal} onHide={closeEditTeamModal}>
+        <Modal.Header closeButton>
+          <Modal.Title>{t('adminTeamEditTitle')}</Modal.Title>
+        </Modal.Header>
+        <Form onSubmit={handleEditTeam}>
+          <Modal.Body>
+            {editTeamError ? <Alert variant="danger">{editTeamError}</Alert> : null}
+            {editTeamSuccess ? <Alert variant="success">{editTeamSuccess}</Alert> : null}
+            <Form.Group className="mb-3">
+              <Form.Label>{t('adminTeamName')}</Form.Label>
+              <Form.Control value={editTeamName} onChange={(e) => setEditTeamName(e.target.value)} required />
+            </Form.Group>
+            <Form.Group className="mb-3">
+              <Form.Label>{t('adminTeamLeaderEmail')}</Form.Label>
+              <Form.Control
+                type="email"
+                value={editTeamLeaderEmail}
+                onChange={(e) => setEditTeamLeaderEmail(e.target.value)}
+                placeholder="team1_leader@example.com"
+                required
+              />
+            </Form.Group>
+            <Form.Group>
+              <Form.Label>{t('loginPassword')}</Form.Label>
+              <InputGroup>
+                <Form.Control
+                  type={showEditTeamPassword ? 'text' : 'password'}
+                  value={editTeamPassword}
+                  onChange={(e) => setEditTeamPassword(e.target.value)}
+                  placeholder={t('adminTeamPasswordHint')}
+                  required
+                  minLength={6}
+                />
+                <Button
+                  variant="outline-secondary"
+                  type="button"
+                  onClick={() => setShowEditTeamPassword((prev) => !prev)}
+                  aria-label={showEditTeamPassword ? t('hidePassword') : t('showPassword')}
+                  title={showEditTeamPassword ? t('hidePassword') : t('showPassword')}
+                >
+                  {showEditTeamPassword ? '🙈' : '👁'}
+                </Button>
+              </InputGroup>
+            </Form.Group>
+          </Modal.Body>
+          <Modal.Footer>
+            <Button variant="secondary" onClick={closeEditTeamModal} disabled={editTeamLoading}>
+              {t('managerCancel')}
+            </Button>
+            <Button variant="primary" type="submit" disabled={editTeamLoading}>
+              {t('adminTeamUpdateButton')}
+            </Button>
+          </Modal.Footer>
+        </Form>
+      </Modal>
 
       <Modal
         show={showDeleteTeamModal}

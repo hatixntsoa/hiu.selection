@@ -8,6 +8,7 @@ import LoginPage from './pages/LoginPage';
 import SettingsPage from './pages/SettingsPage';
 import { usePreferences } from './context/PreferencesContext';
 import api from './services/api';
+import { AppNotification, subscribeNotifications } from './services/notifications';
 import { ActivityItem, CtfTimerState } from './types';
 
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
@@ -65,7 +66,7 @@ function CompetitionLockGate(): null {
             return;
           }
           if (!timer.isExpired && location.pathname === '/ctf-ended') {
-            navigate('/dashboard/scoreboard', { replace: true });
+            navigate('/dashboard/ranking', { replace: true });
           }
         })
         .catch(() => undefined);
@@ -168,6 +169,33 @@ function RealtimeSolveToasts(): JSX.Element {
   );
 }
 
+function CrudNotifications(): JSX.Element {
+  const { localizeApiMessage } = usePreferences();
+  const [items, setItems] = useState<AppNotification[]>([]);
+
+  useEffect(() => {
+    return subscribeNotifications((notification) => {
+      setItems((prev) => [notification, ...prev].slice(0, 6));
+    });
+  }, []);
+
+  return (
+    <ToastContainer position="top-center" className="p-2" style={{ zIndex: 1085 }}>
+      {items.map((item) => (
+        <Toast
+          key={item.id}
+          bg={item.type === 'success' ? 'success' : 'danger'}
+          autohide
+          delay={3200}
+          onClose={() => setItems((prev) => prev.filter((entry) => entry.id !== item.id))}
+        >
+          <Toast.Body className="text-white">{localizeApiMessage(item.message)}</Toast.Body>
+        </Toast>
+      ))}
+    </ToastContainer>
+  );
+}
+
 function App(): JSX.Element {
   const { t } = usePreferences();
 
@@ -176,6 +204,7 @@ function App(): JSX.Element {
       <AuthProvider>
         <CompetitionLockGate />
         <RealtimeSolveToasts />
+        <CrudNotifications />
         <div className="min-vh-100">
           <Navbar />
           <main className="container py-4">
