@@ -5,12 +5,13 @@ import api from '../services/api';
 import FlagManager from '../components/Admin/FlagManager';
 import LiveScoreboard from '../components/Admin/LiveScoreboard';
 import TimerManager from '../components/Admin/TimerManager';
-import { AdminTeamDetails, CtfTimerState, ScoreboardTeam } from '../types';
+import { AdminTeamDetails, Challenge, CtfTimerState, ScoreboardTeam } from '../types';
 import { usePreferences } from '../context/PreferencesContext';
 
 function AdminPage(): JSX.Element {
   const { section } = useParams<{ section?: string }>();
   const [teams, setTeams] = useState<ScoreboardTeam[]>([]);
+  const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [timer, setTimer] = useState<CtfTimerState | null>(null);
   const [showDeleteTeamModal, setShowDeleteTeamModal] = useState(false);
   const [deletingTeam, setDeletingTeam] = useState<ScoreboardTeam | null>(null);
@@ -22,7 +23,8 @@ function AdminPage(): JSX.Element {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const liveScoreboardRef = useRef<HTMLDivElement | null>(null);
   const { t, language } = usePreferences();
-  const currentSection = section === 'teams' || section === 'timer' || section === 'live-scoreboard' ? section : 'flags';
+  const currentSection =
+    section === 'teams' || section === 'timer' || section === 'live-scoreboard' || section === 'scoreboard' ? section : 'flags';
   const isLiveScoreboardRoute = currentSection === 'live-scoreboard';
   const liveTimerLabel = timer?.isInfinite
     ? t('timerInfinite')
@@ -43,9 +45,14 @@ function AdminPage(): JSX.Element {
 
   const fetchData = async (): Promise<void> => {
     try {
-      const [scoreboardRes, timerRes] = await Promise.all([api.get('/scoreboard'), api.get('/scoreboard/timer')]);
+      const [scoreboardRes, timerRes, challengesRes] = await Promise.all([
+        api.get('/scoreboard'),
+        api.get('/scoreboard/timer'),
+        api.get('/challenges')
+      ]);
       setTeams(scoreboardRes.data.scoreboard as ScoreboardTeam[]);
       setTimer(timerRes.data.timer as CtfTimerState);
+      setChallenges(challengesRes.data.challenges as Challenge[]);
     } catch (err) {
       console.error('Error fetching data:', err);
     }
@@ -139,6 +146,68 @@ function AdminPage(): JSX.Element {
     await liveScoreboardRef.current.requestFullscreen();
   };
 
+  const getChallengeMaxPoints = (challenge: Challenge): number => {
+    if (Number(challenge.first_blood_points) > 0) {
+      return Number(challenge.first_blood_points);
+    }
+    if (challenge.difficulty === 'medium') {
+      return 200;
+    }
+    if (challenge.difficulty === 'hard') {
+      return 300;
+    }
+    return 100;
+  };
+
+  const maxTotalPoints = challenges.reduce((sum, challenge) => sum + getChallengeMaxPoints(challenge), 0);
+  const pointsPerThirty = maxTotalPoints > 0 ? maxTotalPoints / 30 : 0;
+  const scoreOverThirty = (score: number): number => {
+    if (pointsPerThirty <= 0) {
+      return 0;
+    }
+    return score / pointsPerThirty;
+  };
+  const formatOverThirty = (score: number): string => {
+    const normalized = scoreOverThirty(score);
+    return Number.isInteger(normalized) ? String(normalized) : normalized.toFixed(2);
+  };
+
+  const rankLabel = (rank: number): string | number => {
+    if (rank === 1) {
+      return '🥇';
+    }
+    if (rank === 2) {
+      return '🥈';
+    }
+    if (rank === 3) {
+      return '🥉';
+    }
+    return rank;
+  };
+
+  const exportScoreboardPdf = async (): Promise<void> => {
+    const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
+      import('jspdf'),
+      import('jspdf-autotable')
+    ]);
+
+    const rows = [...teams]
+      .sort((a, b) => a.rank - b.rank)
+      .map((team) => [String(team.rank), team.name, String(team.score), formatOverThirty(team.score)]);
+
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+    doc.setFontSize(16);
+    doc.text('Selection HIU 2026 - CTF', 40, 40);
+    autoTable(doc, {
+      startY: 60,
+      head: [[t('adminRank'), t('adminTeamName'), t('adminScoreRaw'), t('adminScoreOverThirty')]],
+      body: rows,
+      styles: { fontSize: 11, cellPadding: 6 },
+      headStyles: { fillColor: [52, 73, 94] }
+    });
+    doc.save('selection-hiu-2026-ctf-scoreboard.pdf');
+  };
+
   return (
     <Container fluid>
       {isLiveScoreboardRoute ? (
@@ -163,7 +232,7 @@ function AdminPage(): JSX.Element {
             </button>
           </Card.Header>
           <Card.Body>
-            <LiveScoreboard teams={teams} />
+            <LiveScoreboard teams={teams} fullscreen={isFullscreen} />
           </Card.Body>
         </Card>
       ) : currentSection === 'flags' ? (
@@ -172,6 +241,37 @@ function AdminPage(): JSX.Element {
                 <FlagManager onFlagChange={fetchData} />
               </Card.Body>
             </Card>
+      ) : currentSection === 'scoreboard' ? (
+          <Card className="mt-3 soft-card">
+            <Card.Header className="d-flex justify-content-between align-items-center">
+              <h5 className="mb-0 section-title">{t('adminScoreboardTitle')}</h5>
+              <Button variant="outline-secondary" size="sm" onClick={() => void exportScoreboardPdf()}>
+                {t('adminExportPdf')}
+              </Button>
+            </Card.Header>
+            <Card.Body>
+              <Table striped bordered hover responsive className="warm-table">
+                <thead>
+                  <tr>
+                    <th>{t('adminRank')}</th>
+                    <th>{t('adminTeamName')}</th>
+                    <th>{t('adminScoreRaw')}</th>
+                    <th>{t('adminScoreOverThirty')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {teams.map((team) => (
+                    <tr key={team.id}>
+                      <td>{rankLabel(team.rank)}</td>
+                      <td>{team.name}</td>
+                      <td>{team.score}</td>
+                      <td>{formatOverThirty(team.score)}/30</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            </Card.Body>
+          </Card>
       ) : currentSection === 'teams' ? (
           <Card className="mt-3 soft-card">
             <Card.Header>

@@ -222,6 +222,9 @@ function Navbar(): JSX.Element {
                   <Nav.Link as={Link} to="/admin/timer" active={location.pathname === '/admin/timer'}>
                     {t('adminTabTimer')}
                   </Nav.Link>
+                  <Nav.Link as={Link} to="/admin/scoreboard" active={location.pathname === '/admin/scoreboard'}>
+                    {t('adminTabScoreboard')}
+                  </Nav.Link>
                   <Nav.Link as={Link} to="/admin/live-scoreboard" active={location.pathname === '/admin/live-scoreboard'}>
                     {t('adminTabLiveScoreboard')}
                   </Nav.Link>

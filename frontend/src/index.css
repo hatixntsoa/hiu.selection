@@ -843,6 +843,16 @@ h6,
   padding: 0.35rem;
 }
 
+.live-score-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.9rem;
+}
+
+.live-score-column-card {
+  min-width: 0;
+}
+
 .live-timer-pill {
   font-size: 1.2rem;
   font-weight: 800;
@@ -972,7 +982,28 @@ h6,
 
 .live-scoreboard-screen:fullscreen .card-body {
   flex: 1 1 auto;
-  overflow: auto;
+  overflow: hidden;
+}
+
+.live-scoreboard-screen:fullscreen .admin-live-scoreboard {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.live-scoreboard-screen:fullscreen .live-score-columns {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.live-scoreboard-screen:fullscreen .live-score-column-card {
+  height: 100%;
+}
+
+.live-scoreboard-screen:fullscreen .live-score-column-card .card-body {
+  overflow: hidden;
 }
 
 @media (max-width: 992px) {

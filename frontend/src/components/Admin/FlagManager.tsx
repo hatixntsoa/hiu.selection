@@ -243,7 +243,7 @@ function FlagManager({ onFlagChange }: { onFlagChange?: () => void }): JSX.Eleme
               <td>{item.description || '-'}</td>
               <td><code>{item.flag}</code></td>
               <td>{t(difficultyLabelKey(normalizeDifficulty(item.difficulty)))}</td>
-              <td>{`${item.first_blood_points || 100}|${item.second_blood_points || 75}|${item.default_points || 50}`}</td>
+              <td>{Math.max(Number(item.first_blood_points) || 100, Number(item.second_blood_points) || 75, Number(item.default_points) || 50)}</td>
               <td>
                 <Button variant="success" size="sm" className="me-2" onClick={() => handleShowModal(item)}>
                   {t('managerEdit')}
