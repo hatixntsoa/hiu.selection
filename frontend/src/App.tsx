@@ -1,18 +1,18 @@
-import { useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { BrowserRouter as Router, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { Toast, ToastContainer } from 'react-bootstrap';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Navbar from './components/Navbar';
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
-import DashboardPage from './pages/DashboardPage';
-import AdminPage from './pages/AdminPage';
 import SettingsPage from './pages/SettingsPage';
-import CtfEndedPage from './pages/CtfEndedPage';
 import { usePreferences } from './context/PreferencesContext';
 import api from './services/api';
-import { connectSocket } from './services/socket';
 import { ActivityItem, CtfTimerState } from './types';
+
+const DashboardPage = lazy(() => import('./pages/DashboardPage'));
+const AdminPage = lazy(() => import('./pages/AdminPage'));
+const CtfEndedPage = lazy(() => import('./pages/CtfEndedPage'));
 
 function ProtectedRoute({
   children,
@@ -45,7 +45,9 @@ function CompetitionLockGate(): null {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!user || user.isAdmin) {
+    const isCompetitionRoute =
+      location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/ctf-ended');
+    if (!user || user.isAdmin || !isCompetitionRoute) {
       return;
     }
 
@@ -89,24 +91,47 @@ type SolveToast = {
 };
 
 function RealtimeSolveToasts(): JSX.Element {
+  const { user } = useAuth();
   const { t } = usePreferences();
+  const location = useLocation();
   const [toasts, setToasts] = useState<SolveToast[]>([]);
 
   useEffect(() => {
-    const socket = connectSocket();
-    const onFlagCaptured = (data: ActivityItem): void => {
-      const team = data.teamName || data.team_name || 'Unknown';
-      const challenge = data.challengeTitle || data.challenge_title || 'Unknown challenge';
-      const points = Number(data.points) || 0;
-      const id = `${team}-${challenge}-${data.timestamp || data.submitted_at || Date.now()}`;
-      setToasts((prev) => [{ id, team, challenge, points }, ...prev].slice(0, 5));
-    };
+    const isLiveRoute =
+      location.pathname.startsWith('/dashboard') ||
+      location.pathname.startsWith('/admin') ||
+      location.pathname === '/ctf-ended';
+    if (!user || !isLiveRoute) {
+      return;
+    }
 
-    socket.on('flag_captured', onFlagCaptured);
-    return () => {
-      socket.off('flag_captured', onFlagCaptured);
+    let isActive = true;
+    let cleanup: (() => void) | undefined;
+    const setupSocket = async (): Promise<void> => {
+      const { connectSocket } = await import('./services/socket');
+      if (!isActive) {
+        return;
+      }
+      const socket = connectSocket();
+      const onFlagCaptured = (data: ActivityItem): void => {
+        const team = data.teamName || data.team_name || 'Unknown';
+        const challenge = data.challengeTitle || data.challenge_title || 'Unknown challenge';
+        const points = Number(data.points) || 0;
+        const id = `${team}-${challenge}-${data.timestamp || data.submitted_at || Date.now()}`;
+        setToasts((prev) => [{ id, team, challenge, points }, ...prev].slice(0, 5));
+      };
+      socket.on('flag_captured', onFlagCaptured);
+      cleanup = () => {
+        socket.off('flag_captured', onFlagCaptured);
+      };
     };
-  }, []);
+    void setupSocket();
+
+    return () => {
+      isActive = false;
+      cleanup?.();
+    };
+  }, [location.pathname, user]);
 
   return (
     <ToastContainer position="top-end" className="p-2 live-solve-toast-container">
@@ -130,6 +155,8 @@ function RealtimeSolveToasts(): JSX.Element {
 }
 
 function App(): JSX.Element {
+  const { t } = usePreferences();
+
   return (
     <Router>
       <AuthProvider>
@@ -138,53 +165,55 @@ function App(): JSX.Element {
         <div className="min-vh-100">
           <Navbar />
           <main className="container py-4">
-            <Routes>
-              <Route path="/" element={<HomePage />} />
-              <Route path="/login" element={<Navigate to="/auth" replace />} />
-              <Route path="/auth" element={<LoginPage />} />
-              <Route path="/settings" element={<SettingsPage />} />
-              <Route
-                path="/dashboard"
-                element={
-                  <ProtectedRoute>
-                    <Navigate to="/dashboard/ranking" />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/dashboard/:section"
-                element={
-                  <ProtectedRoute>
-                    <DashboardPage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/admin"
-                element={
-                  <ProtectedRoute adminOnly>
-                    <Navigate to="/admin/challenges" replace />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/admin/:section"
-                element={
-                  <ProtectedRoute adminOnly>
-                    <AdminPage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/ctf-ended"
-                element={
-                  <ProtectedRoute>
-                    <CtfEndedPage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route path="*" element={<Navigate to="/" />} />
-            </Routes>
+            <Suspense fallback={<div className="d-flex justify-content-center py-5">{t('loading')}</div>}>
+              <Routes>
+                <Route path="/" element={<HomePage />} />
+                <Route path="/login" element={<Navigate to="/auth" replace />} />
+                <Route path="/auth" element={<LoginPage />} />
+                <Route path="/settings" element={<SettingsPage />} />
+                <Route
+                  path="/dashboard"
+                  element={
+                    <ProtectedRoute>
+                      <Navigate to="/dashboard/ranking" />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/dashboard/:section"
+                  element={
+                    <ProtectedRoute>
+                      <DashboardPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin"
+                  element={
+                    <ProtectedRoute adminOnly>
+                      <Navigate to="/admin/challenges" replace />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin/:section"
+                  element={
+                    <ProtectedRoute adminOnly>
+                      <AdminPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/ctf-ended"
+                  element={
+                    <ProtectedRoute>
+                      <CtfEndedPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route path="*" element={<Navigate to="/" />} />
+              </Routes>
+            </Suspense>
           </main>
         </div>
       </AuthProvider>

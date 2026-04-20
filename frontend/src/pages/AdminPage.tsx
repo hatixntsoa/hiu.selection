@@ -7,7 +7,6 @@ import LiveScoreboard from '../components/Admin/LiveScoreboard';
 import TimerManager from '../components/Admin/TimerManager';
 import { CtfTimerState, ScoreboardTeam } from '../types';
 import { usePreferences } from '../context/PreferencesContext';
-import { connectSocket } from '../services/socket';
 
 function AdminPage(): JSX.Element {
   const { section } = useParams<{ section?: string }>();
@@ -42,14 +41,31 @@ function AdminPage(): JSX.Element {
   useEffect(() => {
     fetchData();
 
-    const socket = connectSocket();
-    socket.on('scoreboard_update', fetchData);
+    let active = true;
+    let cleanup: (() => void) | undefined;
+    const setupSocket = async (): Promise<void> => {
+      const { connectSocket } = await import('../services/socket');
+      if (!active) {
+        return;
+      }
+      const socket = connectSocket();
+      const onScoreboardUpdate = (): void => {
+        void fetchData();
+      };
+      socket.on('scoreboard_update', onScoreboardUpdate);
+      cleanup = () => {
+        socket.off('scoreboard_update', onScoreboardUpdate);
+      };
+    };
+    void setupSocket();
+
     const interval = window.setInterval(() => {
       void fetchData();
     }, 2000);
 
     return () => {
-      socket.off('scoreboard_update', fetchData);
+      active = false;
+      cleanup?.();
       window.clearInterval(interval);
     };
   }, []);

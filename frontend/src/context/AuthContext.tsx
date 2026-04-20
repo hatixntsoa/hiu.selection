@@ -1,7 +1,6 @@
 import { createContext, ReactNode, useContext, useEffect, useState } from 'react';
 import api from '../services/api';
 import { Team } from '../types';
-import { connectSocket } from '../services/socket';
 
 type AuthContextValue = {
   user: Team | null;
@@ -33,35 +32,49 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
       return;
     }
 
-    const socket = connectSocket();
-    const forceLogout = (): void => {
-      localStorage.removeItem('token');
-      localStorage.removeItem('team');
-      setUser(null);
-      window.location.href = '/auth';
-    };
-    const refreshCurrentUser = (): void => {
-      api
-        .get('/auth/me')
-        .then((response) => {
-          const freshTeam = response.data.team as Team;
-          setUser(freshTeam);
-          localStorage.setItem('team', JSON.stringify(freshTeam));
-        })
-        .catch((error: { response?: { status?: number } }) => {
-          const status = error.response?.status;
-          if (status === 401 || status === 404) {
-            forceLogout();
-            return;
-          }
-        });
-    };
+    let active = true;
+    let cleanup: (() => void) | undefined;
+    const setupSocket = async (): Promise<void> => {
+      const { connectSocket } = await import('../services/socket');
+      if (!active) {
+        return;
+      }
 
-    socket.on('scoreboard_update', refreshCurrentUser);
-    socket.on('team_deleted', forceLogout);
+      const socket = connectSocket();
+      const forceLogout = (): void => {
+        localStorage.removeItem('token');
+        localStorage.removeItem('team');
+        setUser(null);
+        window.location.href = '/auth';
+      };
+      const refreshCurrentUser = (): void => {
+        api
+          .get('/auth/me')
+          .then((response) => {
+            const freshTeam = response.data.team as Team;
+            setUser(freshTeam);
+            localStorage.setItem('team', JSON.stringify(freshTeam));
+          })
+          .catch((error: { response?: { status?: number } }) => {
+            const status = error.response?.status;
+            if (status === 401 || status === 404) {
+              forceLogout();
+              return;
+            }
+          });
+      };
+      socket.on('scoreboard_update', refreshCurrentUser);
+      socket.on('team_deleted', forceLogout);
+      cleanup = () => {
+        socket.off('scoreboard_update', refreshCurrentUser);
+        socket.off('team_deleted', forceLogout);
+      };
+    };
+    void setupSocket();
+
     return () => {
-      socket.off('scoreboard_update', refreshCurrentUser);
-      socket.off('team_deleted', forceLogout);
+      active = false;
+      cleanup?.();
     };
   }, [user?.id]);
 

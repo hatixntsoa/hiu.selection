@@ -1,15 +1,15 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { Alert, Button, Card, Col, Container, Form, Modal, Row } from 'react-bootstrap';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { usePreferences } from '../context/PreferencesContext';
 import api from '../services/api';
-import { connectSocket } from '../services/socket';
 import Scoreboard from '../components/Dashboard/Scoreboard';
-import ScoreboardCharts from '../components/Dashboard/ScoreboardCharts';
 import ChallengeList from '../components/Challenges/ChallengeList';
 import LiveFeed from '../components/Dashboard/LiveFeed';
 import { ActivityItem, Challenge, CtfTimerState, ScoreboardTeam, SubmissionHistoryItem } from '../types';
+
+const ScoreboardCharts = lazy(() => import('../components/Dashboard/ScoreboardCharts'));
 
 type FlagResult = {
   correct: boolean;
@@ -138,17 +138,32 @@ function DashboardPage(): JSX.Element {
   useEffect(() => {
     fetchData();
 
-    const socket = connectSocket();
-    socket.on('flag_captured', (data: ActivityItem) => {
-      setActivity((prev) => [data, ...prev.slice(0, 19)]);
-    });
-    socket.on('scoreboard_update', () => {
-      fetchData();
-    });
+    let active = true;
+    let cleanup: (() => void) | undefined;
+    const setupSocket = async (): Promise<void> => {
+      const { connectSocket } = await import('../services/socket');
+      if (!active) {
+        return;
+      }
+      const socket = connectSocket();
+      const onFlagCaptured = (data: ActivityItem): void => {
+        setActivity((prev) => [data, ...prev.slice(0, 19)]);
+      };
+      const onScoreboardUpdate = (): void => {
+        void fetchData();
+      };
+      socket.on('flag_captured', onFlagCaptured);
+      socket.on('scoreboard_update', onScoreboardUpdate);
+      cleanup = () => {
+        socket.off('flag_captured', onFlagCaptured);
+        socket.off('scoreboard_update', onScoreboardUpdate);
+      };
+    };
+    void setupSocket();
 
     return () => {
-      socket.off('flag_captured');
-      socket.off('scoreboard_update');
+      active = false;
+      cleanup?.();
     };
   }, []);
 
@@ -265,7 +280,9 @@ function DashboardPage(): JSX.Element {
               <Scoreboard scoreboard={scoreboard} currentUserId={user?.id} />
             </Card.Body>
           </Card>
-          <ScoreboardCharts challenges={challenges} solvedChallenges={solvedChallenges} userScore={user?.score || 0} />
+          <Suspense fallback={<div className="text-secondary mt-3">{t('loading')}</div>}>
+            <ScoreboardCharts challenges={challenges} solvedChallenges={solvedChallenges} userScore={user?.score || 0} />
+          </Suspense>
         </>
       )}
 
