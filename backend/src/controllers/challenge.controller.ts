@@ -3,229 +3,199 @@ import sqlite3 from 'sqlite3';
 import { getDatabase } from '../models/database';
 import { ChallengeRow } from '../types';
 
-type ChallengeInput = {
+type FlagInput = {
   title?: string;
   description?: string;
-  category?: string;
-  points?: number;
+  flag?: string;
+  first_blood_points?: number;
+  second_blood_points?: number;
+  default_points?: number;
+};
+
+type FlagImportItem = {
   flag?: string;
 };
 
-type CategoryRow = {
-  id: number;
-  name: string;
-  created_at: string;
-};
+const DEFAULT_FIRST_BLOOD_POINTS = 100;
+const DEFAULT_SECOND_BLOOD_POINTS = 75;
+const DEFAULT_OTHER_POINTS = 50;
 
-const DEFAULT_CATEGORIES = ['Web', 'Crypto', 'Reverse', 'Misc', 'SQL', 'Forensics'];
-
-function ensureDefaultCategories(db: sqlite3.Database, done: (err?: Error | null) => void): void {
-  let remaining = DEFAULT_CATEGORIES.length;
-  let finished = false;
-  if (remaining === 0) {
-    done();
-    return;
+function normalizePositiveInt(value: unknown, fallback: number): number {
+  const number = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(number) || number <= 0) {
+    return fallback;
   }
+  return Math.floor(number);
+}
 
-  DEFAULT_CATEGORIES.forEach((category) => {
-    db.run('INSERT OR IGNORE INTO categories (name) VALUES (?)', [category], (err) => {
-      if (finished) {
-        return;
-      }
-      if (err) {
-        finished = true;
+function generatePublicId(): string {
+  const chars = '0123456789abcdef';
+  let out = '';
+  for (let i = 0; i < 6; i += 1) {
+    out += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return out;
+}
+
+function createFlagWithRetry(
+  db: sqlite3.Database,
+  input: { title: string; description: string; flag: string; firstBloodPoints: number; secondBloodPoints: number; defaultPoints: number },
+  maxAttempts: number,
+  done: (err: Error | null, result?: { id: number; publicId: string }) => void
+): void {
+  let attempts = 0;
+  const attempt = (): void => {
+    attempts += 1;
+    const publicId = generatePublicId();
+    db.run(
+      `INSERT INTO challenges (
+         public_id, title, description, flag, first_blood_points, second_blood_points, default_points
+       ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        publicId,
+        input.title,
+        input.description,
+        input.flag,
+        input.firstBloodPoints,
+        input.secondBloodPoints,
+        input.defaultPoints
+      ],
+      function (this: sqlite3.RunResult, err: Error | null) {
+        if (!err) {
+          done(null, { id: this.lastID, publicId });
+          return;
+        }
+        if (String(err.message || '').includes('UNIQUE') && attempts < maxAttempts) {
+          attempt();
+          return;
+        }
         done(err);
-        return;
       }
-      remaining -= 1;
-      if (remaining === 0) {
-        finished = true;
-        done();
-      }
-    });
-  });
-}
-
-function normalizeCategoryForCode(category: string): string {
-  const normalized = category.toLowerCase().replace(/[^a-z0-9]+/g, '');
-  return normalized || 'misc';
-}
-
-function withChallengeCodes(challenges: ChallengeRow[]): Array<ChallengeRow & { challenge_code: string }> {
-  const categoryCounts = new Map<string, number>();
-  return challenges.map((challenge) => {
-    const bucket = normalizeCategoryForCode(challenge.category || 'misc');
-    const next = (categoryCounts.get(bucket) || 0) + 1;
-    categoryCounts.set(bucket, next);
-    return { ...challenge, challenge_code: `${bucket}#${next}` };
-  });
+    );
+  };
+  attempt();
 }
 
 export function getAllChallenges(req: Request, res: Response): Response | void {
   const db = getDatabase();
   const includeFlag = req.query.includeFlag === 'true';
-
   const query = includeFlag
-    ? 'SELECT * FROM challenges ORDER BY points ASC'
-    : 'SELECT id, title, description, category, points, created_at FROM challenges ORDER BY points ASC';
+    ? `SELECT id, public_id, title, description, flag, first_blood_points, second_blood_points, default_points, created_at
+       FROM challenges ORDER BY created_at DESC, id DESC`
+    : `SELECT id, public_id, title, description, first_blood_points, second_blood_points, default_points, created_at
+       FROM challenges ORDER BY created_at DESC, id DESC`;
 
-  db.all<ChallengeRow>(query, [], (err, challenges) => {
+  db.all<ChallengeRow>(query, [], (err, rows) => {
     if (err) {
       return res.status(500).json({ error: 'Database error' });
     }
-    res.json({ challenges: withChallengeCodes(challenges) });
+    return res.json({ challenges: rows });
   });
 }
 
 export function getChallengeById(req: Request, res: Response): Response | void {
   const db = getDatabase();
   const { id } = req.params;
-
   db.get<ChallengeRow>(
-    'SELECT id, title, description, category, points, created_at FROM challenges WHERE id = ?',
+    `SELECT id, public_id, title, description, first_blood_points, second_blood_points, default_points, created_at
+     FROM challenges WHERE id = ?`,
     [id],
-    (err, challenge) => {
+    (err, row) => {
       if (err) {
         return res.status(500).json({ error: 'Database error' });
       }
-      if (!challenge) {
+      if (!row) {
         return res.status(404).json({ error: 'Challenge not found' });
       }
-      res.json({ challenge: withChallengeCodes([challenge])[0] });
+      return res.json({ challenge: row });
     }
   );
 }
 
 export function createChallenge(req: Request, res: Response): Response | void {
-  const { title, description, category, points, flag } = req.body as ChallengeInput;
-
-  if (!title || !points || !flag || !category) {
-    return res.status(400).json({ error: 'Title, category, points, and flag are required' });
+  const payload = req.body as FlagInput;
+  const flagValue = (payload.flag || '').trim();
+  if (!flagValue) {
+    return res.status(400).json({ error: 'Flag value is required' });
   }
-
   const db = getDatabase();
-  ensureDefaultCategories(db, (seedErr) => {
-    if (seedErr) {
-      return res.status(500).json({ error: 'Database error' });
-    }
-
-    db.get<{ id: number }>(
-      'SELECT id FROM categories WHERE LOWER(name) = LOWER(?)',
-      [category],
-      (categoryErr, categoryRow) => {
-        if (categoryErr) {
-          return res.status(500).json({ error: 'Database error' });
-        }
-        if (!categoryRow) {
-          return res.status(400).json({ error: 'Invalid challenge category' });
-        }
-
-        db.run(
-          'INSERT INTO challenges (title, description, category, points, flag) VALUES (?, ?, ?, ?, ?)',
-          [title, description || '', category, points, flag],
-          function (this: sqlite3.RunResult, err: Error | null) {
-            if (err) {
-              return res.status(500).json({ error: 'Failed to create challenge' });
-            }
-
-            return res.status(201).json({
-              message: 'Challenge created',
-              challenge: { id: this.lastID, title, description, category, points }
-            });
-          }
-        );
-      }
-    );
-  });
-}
-
-export function getCategories(_req: Request, res: Response): Response | void {
-  const db = getDatabase();
-  ensureDefaultCategories(db, (seedErr) => {
-    if (seedErr) {
-      return res.status(500).json({ error: 'Database error' });
-    }
-    db.all<CategoryRow>('SELECT id, name, created_at FROM categories ORDER BY name COLLATE NOCASE ASC', [], (err, rows) => {
-      if (err) {
-        return res.status(500).json({ error: 'Database error' });
-      }
-      return res.json({ categories: rows });
-    });
-  });
-}
-
-type CategoryInput = {
-  name?: string;
-};
-
-export function createCategory(req: Request, res: Response): Response | void {
-  const { name } = req.body as CategoryInput;
-  const trimmed = (name || '').trim();
-  if (!trimmed) {
-    return res.status(400).json({ error: 'Category name is required' });
-  }
-
-  const db = getDatabase();
-  db.run('INSERT INTO categories (name) VALUES (?)', [trimmed], function (this: sqlite3.RunResult, err: Error | null) {
-    if (err) {
-      if ((err as any).message?.includes('UNIQUE')) {
-        return res.status(400).json({ error: 'Category already exists' });
-      }
-      return res.status(500).json({ error: 'Failed to create category' });
+  const input = {
+    title: (payload.title || '').trim(),
+    description: (payload.description || '').trim(),
+    flag: flagValue,
+    firstBloodPoints: normalizePositiveInt(payload.first_blood_points, DEFAULT_FIRST_BLOOD_POINTS),
+    secondBloodPoints: normalizePositiveInt(payload.second_blood_points, DEFAULT_SECOND_BLOOD_POINTS),
+    defaultPoints: normalizePositiveInt(payload.default_points, DEFAULT_OTHER_POINTS)
+  };
+  createFlagWithRetry(db, input, 10, (err, result) => {
+    if (err || !result) {
+      return res.status(500).json({ error: 'Failed to create challenge' });
     }
     return res.status(201).json({
-      message: 'Category created',
-      category: { id: this.lastID, name: trimmed }
+      message: 'Challenge created',
+      challenge: {
+        id: result.id,
+        public_id: result.publicId,
+        title: input.title,
+        description: input.description,
+        first_blood_points: input.firstBloodPoints,
+        second_blood_points: input.secondBloodPoints,
+        default_points: input.defaultPoints
+      }
     });
   });
-}
-
-function updateChallengeDirect(
-  db: sqlite3.Database,
-  id: string,
-  input: ChallengeInput,
-  res: Response
-): Response | void {
-  db.run(
-    'UPDATE challenges SET title = COALESCE(?, title), description = COALESCE(?, description), category = COALESCE(?, category), points = COALESCE(?, points), flag = COALESCE(?, flag) WHERE id = ?',
-    [input.title, input.description, input.category, input.points, input.flag, id],
-    function (this: sqlite3.RunResult, err: Error | null) {
-      if (err) {
-        return res.status(500).json({ error: 'Failed to update challenge' });
-      }
-      if (this.changes === 0) {
-        return res.status(404).json({ error: 'Challenge not found' });
-      }
-      return res.json({ message: 'Challenge updated' });
-    }
-  );
 }
 
 export function updateChallenge(req: Request, res: Response): Response | void {
-  const id = String(req.params.id);
-  const input = req.body as ChallengeInput;
+  const { id } = req.params;
+  const payload = req.body as FlagInput;
   const db = getDatabase();
+  const updates: Array<{ sql: string; value: unknown }> = [];
 
-  if (input.category) {
-    db.get<{ id: number }>('SELECT id FROM categories WHERE LOWER(name) = LOWER(?)', [input.category], (categoryErr, row) => {
-      if (categoryErr) {
-        return res.status(500).json({ error: 'Database error' });
-      }
-      if (!row) {
-        return res.status(400).json({ error: 'Invalid challenge category' });
-      }
-      return updateChallengeDirect(db, id, input, res);
-    });
-    return;
+  if (typeof payload.title !== 'undefined') {
+    updates.push({ sql: 'title = ?', value: String(payload.title).trim() });
+  }
+  if (typeof payload.description !== 'undefined') {
+    updates.push({ sql: 'description = ?', value: String(payload.description).trim() });
+  }
+  if (typeof payload.flag !== 'undefined') {
+    const flag = String(payload.flag).trim();
+    if (!flag) {
+      return res.status(400).json({ error: 'Flag value is required' });
+    }
+    updates.push({ sql: 'flag = ?', value: flag });
+  }
+  if (typeof payload.first_blood_points !== 'undefined') {
+    updates.push({ sql: 'first_blood_points = ?', value: normalizePositiveInt(payload.first_blood_points, DEFAULT_FIRST_BLOOD_POINTS) });
+  }
+  if (typeof payload.second_blood_points !== 'undefined') {
+    updates.push({ sql: 'second_blood_points = ?', value: normalizePositiveInt(payload.second_blood_points, DEFAULT_SECOND_BLOOD_POINTS) });
+  }
+  if (typeof payload.default_points !== 'undefined') {
+    updates.push({ sql: 'default_points = ?', value: normalizePositiveInt(payload.default_points, DEFAULT_OTHER_POINTS) });
   }
 
-  return updateChallengeDirect(db, id, input, res);
+  if (updates.length === 0) {
+    return res.status(400).json({ error: 'No updates provided' });
+  }
+
+  const query = `UPDATE challenges SET ${updates.map((u) => u.sql).join(', ')} WHERE id = ?`;
+  const values = updates.map((u) => u.value);
+  values.push(id);
+  db.run(query, values, function (this: sqlite3.RunResult, err: Error | null) {
+    if (err) {
+      return res.status(500).json({ error: 'Failed to update challenge' });
+    }
+    if (this.changes === 0) {
+      return res.status(404).json({ error: 'Challenge not found' });
+    }
+    return res.json({ message: 'Challenge updated' });
+  });
 }
 
 export function deleteChallenge(req: Request, res: Response): Response | void {
   const { id } = req.params;
   const db = getDatabase();
-
   db.run('DELETE FROM challenges WHERE id = ?', [id], function (this: sqlite3.RunResult, err: Error | null) {
     if (err) {
       return res.status(500).json({ error: 'Failed to delete challenge' });
@@ -235,4 +205,61 @@ export function deleteChallenge(req: Request, res: Response): Response | void {
     }
     return res.json({ message: 'Challenge deleted' });
   });
+}
+
+export function getCategories(_req: Request, res: Response): Response | void {
+  return res.json({ categories: [] });
+}
+
+export function createCategory(_req: Request, res: Response): Response | void {
+  return res.status(410).json({ error: 'Category management removed' });
+}
+
+export function importFlags(req: Request, res: Response): Response | void {
+  const payload = req.body as { flags?: FlagImportItem[] };
+  const rawItems = Array.isArray(payload.flags) ? payload.flags : [];
+  const normalizedFlags = rawItems
+    .map((item) => String(item?.flag || '').trim())
+    .filter((value) => value.length > 0);
+
+  if (normalizedFlags.length === 0) {
+    return res.status(400).json({ error: 'At least one valid flag is required' });
+  }
+
+  const db = getDatabase();
+  const created: Array<{ id: number; public_id: string }> = [];
+  let index = 0;
+  const next = (): void => {
+    if (index >= normalizedFlags.length) {
+      res.status(201).json({
+        message: 'Flags imported',
+        count: created.length,
+        flags: created
+      });
+      return;
+    }
+    const flag = normalizedFlags[index];
+    index += 1;
+    createFlagWithRetry(
+      db,
+      {
+        title: '',
+        description: '',
+        flag,
+        firstBloodPoints: DEFAULT_FIRST_BLOOD_POINTS,
+        secondBloodPoints: DEFAULT_SECOND_BLOOD_POINTS,
+        defaultPoints: DEFAULT_OTHER_POINTS
+      },
+      10,
+      (err, result) => {
+        if (err || !result) {
+          res.status(500).json({ error: 'Failed to create challenge' });
+          return;
+        }
+        created.push({ id: result.id, public_id: result.publicId });
+        next();
+      }
+    );
+  };
+  next();
 }

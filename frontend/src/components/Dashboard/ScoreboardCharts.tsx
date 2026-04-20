@@ -47,16 +47,19 @@ function ScoreboardCharts({
 
   const solvedCount = solvedChallenges.size;
   const totalCount = challenges.length || 1;
-  const solvedPoints = challenges.filter((c) => solvedChallenges.has(c.id)).reduce((sum, c) => sum + c.points, 0);
-  const totalPoints = challenges.reduce((sum, c) => sum + c.points, 0) || 1;
+  const solvedPoints = challenges
+    .filter((c) => solvedChallenges.has(c.id))
+    .reduce((sum, c) => sum + Number(c.default_points || 50), 0);
+  const totalPoints = challenges.reduce((sum, c) => sum + Number(c.default_points || 50), 0) || 1;
 
   const categoryMap = challenges.reduce<Record<string, { solved: number; total: number }>>((acc, challenge) => {
-    if (!acc[challenge.category]) {
-      acc[challenge.category] = { solved: 0, total: 0 };
+    const bucket = 'Flags';
+    if (!acc[bucket]) {
+      acc[bucket] = { solved: 0, total: 0 };
     }
-    acc[challenge.category].total += 1;
+    acc[bucket].total += 1;
     if (solvedChallenges.has(challenge.id)) {
-      acc[challenge.category].solved += 1;
+      acc[bucket].solved += 1;
     }
     return acc;
   }, {});

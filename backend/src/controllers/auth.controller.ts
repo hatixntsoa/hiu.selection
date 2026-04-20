@@ -495,3 +495,72 @@ export function deleteTeamByAdmin(req: Request, res: Response): Response | void 
     });
   });
 }
+
+type AdminSubmissionRow = {
+  id: number;
+  submitted_flag: string;
+  is_correct: number;
+  awarded_points: number;
+  submitted_at: string;
+  challenge_public_id: string | null;
+};
+
+export function getTeamDetailsByAdmin(req: Request, res: Response): Response | void {
+  const teamId = Number(req.params.teamId);
+  if (!Number.isInteger(teamId) || teamId <= 0) {
+    return res.status(400).json({ error: 'Team not found' });
+  }
+
+  const db = getDatabase();
+  db.get<TeamRow>(
+    'SELECT id, name, score, member_count, created_at, is_admin FROM teams WHERE id = ?',
+    [teamId],
+    (teamErr, team) => {
+      if (teamErr) {
+        return res.status(500).json({ error: 'Database error' });
+      }
+      if (!team || team.is_admin === 1) {
+        return res.status(404).json({ error: 'Team not found' });
+      }
+
+      db.all<TeamMemberRow>(
+        `SELECT id, team_id, username, is_primary, created_at
+         FROM team_members
+         WHERE team_id = ?
+         ORDER BY is_primary DESC, created_at ASC, id ASC`,
+        [teamId],
+        (membersErr, members) => {
+          if (membersErr) {
+            return res.status(500).json({ error: 'Database error' });
+          }
+
+          db.all<AdminSubmissionRow>(
+            `SELECT s.id, s.submitted_flag, s.is_correct, s.awarded_points, s.submitted_at, c.public_id as challenge_public_id
+             FROM submissions s
+             LEFT JOIN challenges c ON c.id = s.challenge_id
+             WHERE s.team_id = ?
+             ORDER BY s.submitted_at DESC, s.id DESC`,
+            [teamId],
+            (submissionsErr, submissions) => {
+              if (submissionsErr) {
+                return res.status(500).json({ error: 'Database error' });
+              }
+
+              return res.json({
+                team: {
+                  id: team.id,
+                  name: team.name,
+                  score: team.score,
+                  memberCount: team.member_count || 0,
+                  created_at: team.created_at
+                },
+                members,
+                submissions
+              });
+            }
+          );
+        }
+      );
+    }
+  );
+}

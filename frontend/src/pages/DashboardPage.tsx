@@ -1,15 +1,12 @@
-import { FormEvent, Suspense, lazy, useEffect, useMemo, useState } from 'react';
-import { Alert, Button, Card, Col, Container, Form, Modal, Row } from 'react-bootstrap';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { Alert, Button, Card, Col, Container, Form, Row } from 'react-bootstrap';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { usePreferences } from '../context/PreferencesContext';
 import api from '../services/api';
 import Scoreboard from '../components/Dashboard/Scoreboard';
-import ChallengeList from '../components/Challenges/ChallengeList';
 import LiveFeed from '../components/Dashboard/LiveFeed';
 import { ActivityItem, Challenge, CtfTimerState, ScoreboardTeam, SubmissionHistoryItem } from '../types';
-
-const ScoreboardCharts = lazy(() => import('../components/Dashboard/ScoreboardCharts'));
 
 type FlagResult = {
   correct: boolean;
@@ -17,7 +14,7 @@ type FlagResult = {
   points: number;
 };
 
-type DashboardSection = 'ranking' | 'scoreboard' | 'live-activity' | 'challenges';
+type DashboardSection = 'ranking' | 'scoreboard' | 'live-activity' | 'submission';
 
 async function celebrateSolve(): Promise<void> {
   const { default: confetti } = await import('canvas-confetti');
@@ -92,7 +89,7 @@ async function celebrateSolve(): Promise<void> {
 function DashboardPage(): JSX.Element {
   const { section } = useParams<{ section: string }>();
   const currentSection: DashboardSection = useMemo(() => {
-    const allowed: DashboardSection[] = ['ranking', 'scoreboard', 'live-activity', 'challenges'];
+    const allowed: DashboardSection[] = ['ranking', 'scoreboard', 'live-activity', 'submission'];
     return allowed.includes(section as DashboardSection) ? (section as DashboardSection) : 'ranking';
   }, [section]);
 
@@ -102,8 +99,6 @@ function DashboardPage(): JSX.Element {
   const [scoreboard, setScoreboard] = useState<ScoreboardTeam[]>([]);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [solvedChallenges, setSolvedChallenges] = useState<Set<number>>(new Set());
-  const [activeChallenge, setActiveChallenge] = useState<Challenge | null>(null);
-  const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [flagInput, setFlagInput] = useState('');
   const [result, setResult] = useState<FlagResult | null>(null);
   const [error, setError] = useState('');
@@ -177,14 +172,6 @@ function DashboardPage(): JSX.Element {
     return () => window.clearInterval(interval);
   }, []);
 
-  const openChallengeModal = (challenge: Challenge): void => {
-    setActiveChallenge(challenge);
-    setShowSubmitModal(true);
-    setFlagInput('');
-    setResult(null);
-    setError('');
-  };
-
   const handleSubmitFlag = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
     setError('');
@@ -195,14 +182,13 @@ function DashboardPage(): JSX.Element {
       return;
     }
 
-    if (!activeChallenge || !flagInput) {
-      setError(t('dashboardNeedChallengeAndFlag'));
+    if (!flagInput) {
+      setError(t('dashboardNeedFlagOnly'));
       return;
     }
 
     try {
       const response = await api.post('/flags/submit', {
-        challengeId: activeChallenge.id,
         flag: flagInput
       });
 
@@ -210,7 +196,6 @@ function DashboardPage(): JSX.Element {
       setResult(responseResult);
 
       if (responseResult.correct) {
-        setSolvedChallenges((prev) => new Set([...prev, activeChallenge.id]));
         setFlagInput('');
         updateUser({ score: (user?.score || 0) + responseResult.points });
         await celebrateSolve();
@@ -221,10 +206,11 @@ function DashboardPage(): JSX.Element {
     }
   };
 
-  const totalPoints = challenges.reduce((sum, c) => sum + c.points, 0);
-  const solvedPoints = challenges.filter((c) => solvedChallenges.has(c.id)).reduce((sum, c) => sum + c.points, 0);
+  const totalPoints = challenges.reduce((sum, c) => sum + Number(c.first_blood_points || 100), 0);
+  const solvedPoints = challenges
+    .filter((c) => solvedChallenges.has(c.id))
+    .reduce((sum, c) => sum + Number(c.default_points || 50), 0);
   const rank = scoreboard.findIndex((team) => team.id === user?.id) + 1;
-  const activeSolved = activeChallenge ? solvedChallenges.has(activeChallenge.id) : false;
   const challengesDisabled = Boolean(timer && !timer.canSubmit);
   const challengeDisabledMessage = timer && !timer.isActive ? t('dashboardChallengesNotStarted') : t('dashboardChallengesClosed');
   return (
@@ -269,21 +255,16 @@ function DashboardPage(): JSX.Element {
       )}
 
       {currentSection === 'scoreboard' && (
-        <>
-          <Card className="soft-card mt-1">
-            <Card.Header>
-              <h5 className="mb-0">
-                <span className="live-indicator text-success">●</span> {t('dashboardScoreboard')}
-              </h5>
-            </Card.Header>
-            <Card.Body>
-              <Scoreboard scoreboard={scoreboard} currentUserId={user?.id} />
-            </Card.Body>
-          </Card>
-          <Suspense fallback={<div className="text-secondary mt-3">{t('loading')}</div>}>
-            <ScoreboardCharts challenges={challenges} solvedChallenges={solvedChallenges} userScore={user?.score || 0} />
-          </Suspense>
-        </>
+        <Card className="soft-card mt-1">
+          <Card.Header>
+            <h5 className="mb-0">
+              <span className="live-indicator text-success">●</span> {t('dashboardScoreboard')}
+            </h5>
+          </Card.Header>
+          <Card.Body>
+            <Scoreboard scoreboard={scoreboard} currentUserId={user?.id} />
+          </Card.Body>
+        </Card>
       )}
 
       {currentSection === 'live-activity' && (
@@ -297,70 +278,43 @@ function DashboardPage(): JSX.Element {
         </Card>
       )}
 
-      {currentSection === 'challenges' && (
+      {currentSection === 'submission' && (
         <Card className="soft-card mt-1">
           <Card.Header>
-            <h5 className="mb-0 section-title">{t('dashboardChallenges')}</h5>
+            <h5 className="mb-0 section-title">{t('dashboardSubmission')}</h5>
           </Card.Header>
           <Card.Body>
             {challengesDisabled && <Alert variant={timer?.isActive ? 'danger' : 'secondary'} className="mb-3">{challengeDisabledMessage}</Alert>}
-            <ChallengeList
-              challenges={challenges}
-              solvedChallenges={solvedChallenges}
-              onOpenChallenge={openChallengeModal}
-              activeChallengeId={activeChallenge?.id || null}
-              disabled={challengesDisabled}
-            />
+            <Form onSubmit={handleSubmitFlag}>
+              <Form.Group className="mb-3">
+                <Form.Label>{t('dashboardFlagLabel')}</Form.Label>
+                <Form.Control
+                  type="text"
+                  placeholder="HIU_2026{...}"
+                  value={flagInput}
+                  onChange={(e) => setFlagInput(e.target.value)}
+                  disabled={challengesDisabled}
+                />
+              </Form.Group>
+              {result && (
+                <Alert variant={result.correct ? 'success' : 'danger'} className="mt-2 mb-0">
+                  {localizeApiMessage(result.message)} {result.correct && `+${result.points} ${t('scoreboardPoints').toLowerCase()}!`}
+                </Alert>
+              )}
+              {error && (
+                <Alert variant="danger" className="mt-2 mb-0">
+                  {error}
+                </Alert>
+              )}
+              <div className="mt-3">
+                <Button variant="primary" type="submit" disabled={challengesDisabled}>
+                  {t('dashboardSubmitButton')}
+                </Button>
+              </div>
+            </Form>
           </Card.Body>
         </Card>
       )}
-
-      <Modal show={showSubmitModal} onHide={() => setShowSubmitModal(false)} centered>
-        <Form onSubmit={handleSubmitFlag}>
-          <Modal.Header closeButton>
-            <Modal.Title>{activeChallenge?.title || t('dashboardSubmitFlag')}</Modal.Title>
-          </Modal.Header>
-          <Modal.Body>
-            {activeChallenge && (
-              <>
-                <p className="text-secondary mb-2">{activeChallenge.description}</p>
-                <p className="mb-3">
-                  <strong>{activeChallenge.points}</strong> {t('scoreboardPoints').toLowerCase()}
-                </p>
-              </>
-            )}
-            <Form.Group className="mb-3">
-              <Form.Label>{t('dashboardFlagLabel')}</Form.Label>
-              <Form.Control
-                type="text"
-                placeholder="HIU_2026{...}"
-                value={flagInput}
-                onChange={(e) => setFlagInput(e.target.value)}
-                disabled={activeSolved || challengesDisabled}
-              />
-            </Form.Group>
-
-            {result && (
-              <Alert variant={result.correct ? 'success' : 'danger'} className="mt-2 mb-0">
-                {localizeApiMessage(result.message)} {result.correct && `+${result.points} ${t('scoreboardPoints').toLowerCase()}!`}
-              </Alert>
-            )}
-            {error && (
-              <Alert variant="danger" className="mt-2 mb-0">
-                {error}
-              </Alert>
-            )}
-          </Modal.Body>
-          <Modal.Footer>
-            <Button variant="secondary" onClick={() => setShowSubmitModal(false)}>
-              {t('managerCancel')}
-            </Button>
-             <Button variant="primary" type="submit" disabled={activeSolved || challengesDisabled}>
-               {activeSolved ? t('challengesSolved') : t('dashboardSubmitButton')}
-             </Button>
-          </Modal.Footer>
-        </Form>
-      </Modal>
     </Container>
   );
 }

@@ -60,6 +60,7 @@ const apiMessageMap: Record<string, TranslationKey> = {
   'Team name member cannot be deleted': 'apiTeamNameMemberDeleteBlocked',
   'CTF is finished. Access is locked for team accounts.': 'apiCtfFinishedLocked',
   'Challenge ID and flag are required': 'apiChallengeIdFlagRequired',
+  'Flag value is required': 'apiFlagOnlyRequired',
   'You have already solved this challenge': 'apiAlreadySolved',
   'Failed to submit flag': 'apiFailedSubmitFlag',
   'Too many flag submissions. Please slow down.': 'apiTooManySubmissions',

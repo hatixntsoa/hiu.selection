@@ -5,6 +5,7 @@ import {
   getCategories,
   getChallengeById,
   createChallenge,
+  importFlags,
   updateChallenge,
   deleteChallenge
 } from '../controllers/challenge.controller';
@@ -15,6 +16,7 @@ import { competitionLockMiddleware } from '../middleware/competition-lock.middle
 const router = Router();
 
 router.get('/', authMiddleware, competitionLockMiddleware, getAllChallenges);
+router.post('/import', authMiddleware, competitionLockMiddleware, adminMiddleware, importFlags);
 router.get('/categories', getCategories);
 router.get('/:id', authMiddleware, competitionLockMiddleware, getChallengeById);
 router.post('/', authMiddleware, competitionLockMiddleware, adminMiddleware, createChallenge);

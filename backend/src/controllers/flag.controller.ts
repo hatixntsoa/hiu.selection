@@ -8,28 +8,32 @@ import { ChallengeRow } from '../types';
 type SubmissionRow = {
   id: number;
   challenge_id: number;
+  challenge_public_id: string;
   submitted_flag: string;
+  awarded_points: number;
   is_correct: number;
   submitted_at: string;
   challenge_title: string;
-  points: number;
 };
 
 type FlagSubmissionBody = {
-  challengeId?: number;
   flag?: string;
 };
 
+type SolveCountRow = {
+  total: number;
+};
+
 export async function submitFlag(req: Request, res: Response, io?: Server): Promise<Response | void> {
-  const { challengeId, flag } = req.body as FlagSubmissionBody;
+  const { flag } = req.body as FlagSubmissionBody;
   const teamId = req.user?.id;
 
   if (!teamId) {
     return res.status(401).json({ error: 'Authentication required' });
   }
 
-  if (!challengeId || !flag) {
-    return res.status(400).json({ error: 'Challenge ID and flag are required' });
+  if (!flag) {
+    return res.status(400).json({ error: 'Flag value is required' });
   }
 
   try {
@@ -43,63 +47,77 @@ export async function submitFlag(req: Request, res: Response, io?: Server): Prom
 
   const db = getDatabase();
 
-  db.get(
-    'SELECT * FROM submissions WHERE team_id = ? AND challenge_id = ? AND is_correct = 1',
-    [teamId, challengeId],
-    (err, existing) => {
-      if (err) {
-        return res.status(500).json({ error: 'Database error' });
-      }
+  db.get<ChallengeRow>('SELECT * FROM challenges WHERE LOWER(TRIM(flag)) = LOWER(TRIM(?))', [flag], (challengeErr, challenge) => {
+    if (challengeErr) {
+      return res.status(500).json({ error: 'Database error' });
+    }
 
-      if (existing) {
-        return res.status(400).json({ error: 'You have already solved this challenge' });
-      }
+    if (!challenge) {
+      res.json({
+        correct: false,
+        message: 'Incorrect flag. Try again!',
+        points: 0
+      });
+      return;
+    }
 
-      db.get<ChallengeRow>('SELECT * FROM challenges WHERE id = ?', [challengeId], (challengeErr, challenge) => {
-        if (challengeErr) {
+    db.get(
+      'SELECT id FROM submissions WHERE team_id = ? AND challenge_id = ? AND is_correct = 1',
+      [teamId, challenge.id],
+      (existingErr, existing) => {
+        if (existingErr) {
           return res.status(500).json({ error: 'Database error' });
         }
-
-        if (!challenge) {
-          return res.status(404).json({ error: 'Challenge not found' });
+        if (existing) {
+          return res.status(400).json({ error: 'You have already solved this challenge' });
         }
 
-        const isCorrect = flag.trim().toLowerCase() === challenge.flag.trim().toLowerCase();
-
-        db.run(
-          'INSERT INTO submissions (team_id, challenge_id, submitted_flag, is_correct) VALUES (?, ?, ?, ?)',
-          [teamId, challengeId, flag, isCorrect ? 1 : 0],
-          function (this: sqlite3.RunResult, submissionErr: Error | null) {
-            if (submissionErr) {
-              return res.status(500).json({ error: 'Failed to submit flag' });
+        db.get<SolveCountRow>(
+          'SELECT COUNT(*) as total FROM submissions WHERE challenge_id = ? AND is_correct = 1',
+          [challenge.id],
+          (countErr, countRow) => {
+            if (countErr) {
+              return res.status(500).json({ error: 'Database error' });
             }
+            const solveCount = countRow?.total || 0;
+            const awardedPoints =
+              solveCount === 0
+                ? Number(challenge.first_blood_points) || 100
+                : solveCount === 1
+                  ? Number(challenge.second_blood_points) || 75
+                  : Number(challenge.default_points) || 50;
 
-            if (isCorrect) {
-              db.run('UPDATE teams SET score = score + ? WHERE id = ?', [challenge.points, teamId]);
+            db.run(
+              'INSERT INTO submissions (team_id, challenge_id, submitted_flag, is_correct, awarded_points) VALUES (?, ?, ?, 1, ?)',
+              [teamId, challenge.id, flag, awardedPoints],
+              function (this: sqlite3.RunResult, submissionErr: Error | null) {
+                if (submissionErr) {
+                  return res.status(500).json({ error: 'Failed to submit flag' });
+                }
 
-              db.get<{ name: string }>('SELECT name FROM teams WHERE id = ?', [teamId], (_teamErr, team) => {
-                const activity = {
-                  teamName: team?.name || 'Unknown',
-                  challengeTitle: challenge.title,
-                  points: challenge.points,
-                  timestamp: new Date().toISOString()
-                };
+                db.run('UPDATE teams SET score = score + ? WHERE id = ?', [awardedPoints, teamId]);
+                db.get<{ name: string }>('SELECT name FROM teams WHERE id = ?', [teamId], (_teamErr, team) => {
+                  const activity = {
+                    teamName: team?.name || 'Unknown',
+                    points: awardedPoints,
+                    timestamp: new Date().toISOString()
+                  };
+                  io?.emit('flag_captured', activity);
+                  io?.emit('scoreboard_update');
+                });
 
-                io?.emit('flag_captured', activity);
-                io?.emit('scoreboard_update');
-              });
-            }
-
-            res.json({
-              correct: isCorrect,
-              message: isCorrect ? 'Correct! Flag accepted.' : 'Incorrect flag. Try again!',
-              points: isCorrect ? challenge.points : 0
-            });
+                res.json({
+                  correct: true,
+                  message: 'Correct! Flag accepted.',
+                  points: awardedPoints
+                });
+              }
+            );
           }
         );
-      });
-    }
-  );
+      }
+    );
+  });
 }
 
 export function getSubmissionHistory(req: Request, res: Response): Response | void {
@@ -111,9 +129,9 @@ export function getSubmissionHistory(req: Request, res: Response): Response | vo
   const db = getDatabase();
 
   db.all<SubmissionRow>(
-    `SELECT s.id, s.challenge_id, s.submitted_flag, s.is_correct, s.submitted_at, c.title as challenge_title, c.points
+    `SELECT s.id, s.challenge_id, c.public_id as challenge_public_id, s.submitted_flag, s.is_correct, s.awarded_points, s.submitted_at, c.title as challenge_title
      FROM submissions s
-     JOIN challenges c ON s.challenge_id = c.id
+     LEFT JOIN challenges c ON s.challenge_id = c.id
      WHERE s.team_id = ?
      ORDER BY s.submitted_at DESC`,
     [teamId],

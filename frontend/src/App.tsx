@@ -86,7 +86,6 @@ function CompetitionLockGate(): null {
 type SolveToast = {
   id: string;
   team: string;
-  challenge: string;
   points: number;
 };
 
@@ -115,10 +114,9 @@ function RealtimeSolveToasts(): JSX.Element {
       const socket = connectSocket();
       const onFlagCaptured = (data: ActivityItem): void => {
         const team = data.teamName || data.team_name || 'Unknown';
-        const challenge = data.challengeTitle || data.challenge_title || 'Unknown challenge';
         const points = Number(data.points) || 0;
-        const id = `${team}-${challenge}-${data.timestamp || data.submitted_at || Date.now()}`;
-        setToasts((prev) => [{ id, team, challenge, points }, ...prev].slice(0, 5));
+        const id = `${team}-${points}-${data.timestamp || data.submitted_at || Date.now()}`;
+        setToasts((prev) => [{ id, team, points }, ...prev].slice(0, 5));
       };
       socket.on('flag_captured', onFlagCaptured);
       cleanup = () => {
@@ -146,7 +144,7 @@ function RealtimeSolveToasts(): JSX.Element {
           className="live-solve-toast"
         >
           <Toast.Body>
-            {t('solveToast', { team: item.team, challenge: item.challenge, points: item.points })}
+            {t('solveToastSimple', { team: item.team, points: item.points })}
           </Toast.Body>
         </Toast>
       ))}
@@ -191,7 +189,7 @@ function App(): JSX.Element {
                   path="/admin"
                   element={
                     <ProtectedRoute adminOnly>
-                      <Navigate to="/admin/challenges" replace />
+                      <Navigate to="/admin/flags" replace />
                     </ProtectedRoute>
                   }
                 />

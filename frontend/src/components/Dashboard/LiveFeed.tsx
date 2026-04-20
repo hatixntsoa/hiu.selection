@@ -15,11 +15,7 @@ function LiveFeed({ activity }: { activity: ActivityItem[] }): JSX.Element {
           {activity.map((item, index) => (
             <ListGroup.Item key={index} className="bg-transparent activity-item">
               <div className="d-flex justify-content-between align-items-start">
-              <div>
-                <strong>{item.team_name || item.teamName}</strong>
-                <span className="text-secondary">{t('liveFeedSolved')}</span>
-                <strong className="text-primary">{item.challenge_title || item.challengeTitle}</strong>
-              </div>
+              <div><strong>{item.team_name || item.teamName}</strong></div>
               <Badge bg="success">+{item.points} pts</Badge>
             </div>
             <small className="text-secondary">

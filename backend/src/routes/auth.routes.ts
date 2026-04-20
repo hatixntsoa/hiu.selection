@@ -4,6 +4,7 @@ import {
   deleteTeamByAdmin,
   deleteTeamMember,
   getMe,
+  getTeamDetailsByAdmin,
   listTeamMembers,
   login,
   register,
@@ -23,6 +24,7 @@ router.get('/team/members', authMiddleware, listTeamMembers);
 router.post('/team/members', authMiddleware, addTeamMember);
 router.put('/team/members/:memberId', authMiddleware, updateTeamMember);
 router.delete('/team/members/:memberId', authMiddleware, deleteTeamMember);
+router.get('/admin/teams/:teamId', authMiddleware, adminMiddleware, getTeamDetailsByAdmin);
 router.delete('/admin/teams/:teamId', authMiddleware, adminMiddleware, deleteTeamByAdmin);
 
 export default router;

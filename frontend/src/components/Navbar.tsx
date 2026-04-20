@@ -201,20 +201,20 @@ function Navbar(): JSX.Element {
                   </Nav.Link>
                   <Nav.Link
                     as={Link}
-                    to={challengesDisabled ? '#' : '/dashboard/challenges'}
-                    active={!challengesDisabled && location.pathname === '/dashboard/challenges'}
+                    to={challengesDisabled ? '#' : '/dashboard/submission'}
+                    active={!challengesDisabled && location.pathname === '/dashboard/submission'}
                     disabled={challengesDisabled}
                     title={challengesDisabledReason}
                     className={challengesDisabled ? 'challenge-tab-disabled' : undefined}
                   >
-                    {t('dashboardTabChallenges')}
+                    {t('dashboardTabSubmission')}
                   </Nav.Link>
                 </>
               )}
               {user?.isAdmin && (
                 <>
-                  <Nav.Link as={Link} to="/admin/challenges" active={location.pathname === '/admin/challenges'}>
-                    {t('adminTabChallenges')}
+                  <Nav.Link as={Link} to="/admin/flags" active={location.pathname === '/admin/flags'}>
+                    {t('adminTabFlags')}
                   </Nav.Link>
                   <Nav.Link as={Link} to="/admin/teams" active={location.pathname === '/admin/teams'}>
                     {t('adminTabTeams')}
@@ -247,7 +247,9 @@ function Navbar(): JSX.Element {
                         {user.name}
                       </Button>
                     )}
-                    <span className="badge rounded-pill warm-badge">{t('navPoints', { score: user.score })}</span>
+                    {!user.isAdmin && (
+                      <span className="badge rounded-pill warm-badge">{t('navPoints', { score: user.score })}</span>
+                    )}
                   </Nav.Item>
                   <Button
                     variant="outline-secondary"

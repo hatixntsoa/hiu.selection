@@ -19,7 +19,6 @@ type ScoreboardTeam = {
 type ActivityRow = {
   submitted_at: string;
   team_name: string;
-  challenge_title: string;
   points: number;
 };
 
@@ -51,10 +50,9 @@ export function getActivityFeed(_req: Request, res: Response): Response | void {
   const db = getDatabase();
 
   db.all<ActivityRow>(
-    `SELECT s.submitted_at, t.name as team_name, c.title as challenge_title, c.points
+    `SELECT s.submitted_at, t.name as team_name, s.awarded_points as points
      FROM submissions s
      JOIN teams t ON s.team_id = t.id
-     JOIN challenges c ON s.challenge_id = c.id
      WHERE s.is_correct = 1
      ORDER BY s.submitted_at DESC
      LIMIT 20`,
@@ -75,8 +73,8 @@ export function getStats(_req: Request, res: Response): void {
   db.get<CountRow>('SELECT COUNT(*) as total FROM teams WHERE is_admin = 0', [], (_err1, teamsRow) => {
     stats.totalTeams = teamsRow?.total || 0;
 
-    db.get<CountRow>('SELECT COUNT(*) as total FROM challenges', [], (_err2, challengesRow) => {
-      stats.totalChallenges = challengesRow?.total || 0;
+    db.get<CountRow>('SELECT COUNT(*) as total FROM challenges', [], (_err2, flagsRow) => {
+      stats.totalChallenges = flagsRow?.total || 0;
 
       db.get<CountRow>('SELECT COUNT(*) as total FROM submissions WHERE is_correct = 1', [], (_err3, solvesRow) => {
         stats.totalSolves = solvesRow?.total || 0;

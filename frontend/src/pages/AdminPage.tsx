@@ -2,10 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { Alert, Button, Card, Container, Modal, Table } from 'react-bootstrap';
 import { useParams } from 'react-router-dom';
 import api from '../services/api';
-import ChallengeManager from '../components/Admin/ChallengeManager';
+import FlagManager from '../components/Admin/FlagManager';
 import LiveScoreboard from '../components/Admin/LiveScoreboard';
 import TimerManager from '../components/Admin/TimerManager';
-import { CtfTimerState, ScoreboardTeam } from '../types';
+import { AdminTeamDetails, CtfTimerState, ScoreboardTeam } from '../types';
 import { usePreferences } from '../context/PreferencesContext';
 
 function AdminPage(): JSX.Element {
@@ -15,10 +15,14 @@ function AdminPage(): JSX.Element {
   const [showDeleteTeamModal, setShowDeleteTeamModal] = useState(false);
   const [deletingTeam, setDeletingTeam] = useState<ScoreboardTeam | null>(null);
   const [deleteTeamError, setDeleteTeamError] = useState('');
+  const [showTeamDetailsModal, setShowTeamDetailsModal] = useState(false);
+  const [teamDetails, setTeamDetails] = useState<AdminTeamDetails | null>(null);
+  const [teamDetailsLoading, setTeamDetailsLoading] = useState(false);
+  const [teamDetailsError, setTeamDetailsError] = useState('');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const liveScoreboardRef = useRef<HTMLDivElement | null>(null);
   const { t, language } = usePreferences();
-  const currentSection = section === 'teams' || section === 'timer' || section === 'live-scoreboard' ? section : 'challenges';
+  const currentSection = section === 'teams' || section === 'timer' || section === 'live-scoreboard' ? section : 'flags';
   const isLiveScoreboardRoute = currentSection === 'live-scoreboard';
   const liveTimerLabel = timer?.isInfinite
     ? t('timerInfinite')
@@ -91,6 +95,22 @@ function AdminPage(): JSX.Element {
     }
   };
 
+  const openTeamDetailsModal = async (team: ScoreboardTeam): Promise<void> => {
+    setShowTeamDetailsModal(true);
+    setTeamDetails(null);
+    setTeamDetailsError('');
+    setTeamDetailsLoading(true);
+    try {
+      const response = await api.get(`/auth/admin/teams/${team.id}`);
+      setTeamDetails(response.data as AdminTeamDetails);
+    } catch (err) {
+      const error = err as { response?: { data?: { error?: string } } };
+      setTeamDetailsError(error.response?.data?.error || t('adminTeamDetailsFailed'));
+    } finally {
+      setTeamDetailsLoading(false);
+    }
+  };
+
   useEffect(() => {
     const onChange = (): void => {
       setIsFullscreen(document.fullscreenElement === liveScoreboardRef.current);
@@ -137,10 +157,10 @@ function AdminPage(): JSX.Element {
             <LiveScoreboard teams={teams} />
           </Card.Body>
         </Card>
-      ) : currentSection === 'challenges' ? (
+      ) : currentSection === 'flags' ? (
             <Card className="mt-3 soft-card">
               <Card.Body>
-                <ChallengeManager onChallengeChange={fetchData} />
+                <FlagManager onFlagChange={fetchData} />
               </Card.Body>
             </Card>
       ) : currentSection === 'teams' ? (
@@ -169,7 +189,14 @@ function AdminPage(): JSX.Element {
                       </td>
                       <td>{team.created_at ? new Date(team.created_at).toLocaleDateString(language === 'fr' ? 'fr-FR' : 'en-US') : '-'}</td>
                       <td>
-                        <Button variant="danger" size="sm" onClick={() => openDeleteTeamModal(team)}>
+                        <Button variant="outline-secondary" size="sm" className="me-2" onClick={() => void openTeamDetailsModal(team)}>
+                          {t('adminView')}
+                        </Button>
+                        <Button
+                          variant="danger"
+                          size="sm"
+                          onClick={() => openDeleteTeamModal(team)}
+                        >
                           {t('managerDelete')}
                         </Button>
                       </td>
@@ -217,6 +244,114 @@ function AdminPage(): JSX.Element {
           </Button>
           <Button variant="danger" onClick={() => void handleDeleteTeam()}>
             {t('managerDelete')}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      <Modal
+        show={showTeamDetailsModal}
+        onHide={() => {
+          setShowTeamDetailsModal(false);
+          setTeamDetails(null);
+          setTeamDetailsError('');
+          setTeamDetailsLoading(false);
+        }}
+        size="lg"
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>{t('adminTeamDetailsTitle')}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {teamDetailsLoading ? <p className="mb-0">{t('loading')}</p> : null}
+          {!teamDetailsLoading && teamDetailsError ? (
+            <Alert variant="danger" className="mb-0">
+              {teamDetailsError}
+            </Alert>
+          ) : null}
+          {!teamDetailsLoading && !teamDetailsError && teamDetails ? (
+            <div className="d-flex flex-column gap-4">
+              <div>
+                <h6 className="mb-2">{t('adminTeamDetailsInfo')}</h6>
+                <div className="d-flex flex-wrap gap-3">
+                  <span>
+                    <strong>{t('adminTeamName')}:</strong> {teamDetails.team.name}
+                  </span>
+                  <span>
+                    <strong>{t('adminScore')}:</strong> {teamDetails.team.score}
+                  </span>
+                  <span>
+                    <strong>{t('teamProfileMembers')}:</strong> {teamDetails.members.length}
+                  </span>
+                </div>
+              </div>
+              <div>
+                <h6 className="mb-2">{t('teamProfileMembers')}</h6>
+                {teamDetails.members.length === 0 ? (
+                  <p className="mb-0 text-secondary">{t('adminTeamDetailsNoMembers')}</p>
+                ) : (
+                  <Table striped bordered hover responsive className="warm-table mb-0">
+                    <thead>
+                      <tr>
+                        <th>{t('adminTeamDetailsUsername')}</th>
+                        <th>{t('adminTeamDetailsRole')}</th>
+                        <th>{t('adminRegistered')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {teamDetails.members.map((member) => (
+                        <tr key={member.id}>
+                          <td>{member.username}</td>
+                          <td>{member.is_primary ? t('adminTeamDetailsPrimary') : t('adminTeamDetailsMember')}</td>
+                          <td>{member.created_at ? new Date(member.created_at).toLocaleString(language === 'fr' ? 'fr-FR' : 'en-US') : '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </Table>
+                )}
+              </div>
+              <div>
+                <h6 className="mb-2">{t('adminTeamDetailsSubmissions')}</h6>
+                {teamDetails.submissions.length === 0 ? (
+                  <p className="mb-0 text-secondary">{t('adminTeamDetailsNoSubmissions')}</p>
+                ) : (
+                  <Table striped bordered hover responsive className="warm-table mb-0">
+                    <thead>
+                      <tr>
+                        <th>{t('managerTableId')}</th>
+                        <th>{t('dashboardFlagLabel')}</th>
+                        <th>{t('adminTeamDetailsResult')}</th>
+                        <th>{t('adminTeamDetailsPoints')}</th>
+                        <th>{t('adminTeamDetailsSubmittedAt')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {teamDetails.submissions.map((submission) => (
+                        <tr key={submission.id}>
+                          <td>{submission.challenge_public_id || '-'}</td>
+                          <td>{submission.submitted_flag}</td>
+                          <td>{submission.is_correct ? t('adminTeamDetailsCorrect') : t('adminTeamDetailsWrong')}</td>
+                          <td>{submission.awarded_points || 0}</td>
+                          <td>{new Date(submission.submitted_at).toLocaleString(language === 'fr' ? 'fr-FR' : 'en-US')}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </Table>
+                )}
+              </div>
+            </div>
+          ) : null}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setShowTeamDetailsModal(false);
+              setTeamDetails(null);
+              setTeamDetailsError('');
+              setTeamDetailsLoading(false);
+            }}
+          >
+            {t('managerCancel')}
           </Button>
         </Modal.Footer>
       </Modal>

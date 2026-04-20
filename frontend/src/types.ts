@@ -18,11 +18,15 @@ export interface TeamMember {
 
 export interface Challenge {
   id: number;
+  public_id?: string;
   challenge_code?: string;
   title: string;
   description: string;
   category: string;
   points: number;
+  first_blood_points?: number;
+  second_blood_points?: number;
+  default_points?: number;
   flag?: string;
   created_at?: string;
 }
@@ -36,8 +40,6 @@ export interface ChallengeCategory {
 export interface ActivityItem {
   team_name?: string;
   teamName?: string;
-  challenge_title?: string;
-  challengeTitle?: string;
   points: number;
   submitted_at?: string;
   timestamp?: string;
@@ -46,11 +48,13 @@ export interface ActivityItem {
 export interface SubmissionHistoryItem {
   id: number;
   challenge_id: number;
+  challenge_public_id?: string;
   submitted_flag: string;
   is_correct: number;
   submitted_at: string;
-  challenge_title: string;
-  points: number;
+  challenge_title?: string;
+  awarded_points?: number;
+  points?: number;
 }
 
 export interface ScoreboardTeam {
@@ -70,4 +74,25 @@ export interface CtfTimerState {
   timeLeftSeconds: number | null;
   isExpired: boolean;
   canSubmit: boolean;
+}
+
+export interface AdminTeamSubmission {
+  id: number;
+  submitted_flag: string;
+  is_correct: number;
+  awarded_points: number;
+  submitted_at: string;
+  challenge_public_id?: string | null;
+}
+
+export interface AdminTeamDetails {
+  team: {
+    id: number;
+    name: string;
+    score: number;
+    memberCount: number;
+    created_at: string;
+  };
+  members: TeamMember[];
+  submissions: AdminTeamSubmission[];
 }

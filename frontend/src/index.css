@@ -743,6 +743,31 @@ h6,
   line-height: 1;
 }
 
+.flag-import-dropzone {
+  background: color-mix(in srgb, var(--warm-surface) 82%, var(--warm-bg));
+  border-color: var(--warm-border) !important;
+}
+
+.flag-import-dropzone input[type='file']::file-selector-button {
+  border: 1px solid var(--warm-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--warm-control-bg) 88%, var(--warm-surface));
+  color: var(--warm-text);
+  padding: 0.35rem 0.75rem;
+  margin-right: 0.75rem;
+  cursor: pointer;
+}
+
+.flag-import-dropzone input[type='file']::-webkit-file-upload-button {
+  border: 1px solid var(--warm-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--warm-control-bg) 88%, var(--warm-surface));
+  color: var(--warm-text);
+  padding: 0.35rem 0.75rem;
+  margin-right: 0.75rem;
+  cursor: pointer;
+}
+
 .activity-item {
   border-bottom: 1px solid color-mix(in srgb, var(--warm-border) 80%, transparent) !important;
 }

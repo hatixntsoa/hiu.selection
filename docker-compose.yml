@@ -11,7 +11,7 @@ services:
       FRONTEND_URL: ${FRONTEND_URL:-}
       DB_PATH: /app/data/ctf.db
     volumes:
-      - backend_data:/app/data
+      - ./backend/data:/app/data
 
   frontend:
     build:
@@ -22,6 +22,3 @@ services:
       - "3000:80"
     depends_on:
       - backend
-
-volumes:
-  backend_data:
