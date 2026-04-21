@@ -29,6 +29,7 @@ function AdminPage(): JSX.Element {
   const [editTeamLoading, setEditTeamLoading] = useState(false);
   const [sharedTeamEmailState, setSharedTeamEmailState] = useState<Record<number, string>>({});
   const [isSendingAllCreds, setIsSendingAllCreds] = useState(false);
+  const [sharingTeamIds, setSharingTeamIds] = useState<Record<number, boolean>>({});
   const [showTeamDetailsModal, setShowTeamDetailsModal] = useState(false);
   const [teamDetails, setTeamDetails] = useState<AdminTeamDetails | null>(null);
   const [teamDetailsLoading, setTeamDetailsLoading] = useState(false);
@@ -62,14 +63,12 @@ function AdminPage(): JSX.Element {
 
   const fetchData = async (): Promise<void> => {
     try {
-      const [scoreboardRes, timerRes, challengesRes, activityRes] = await Promise.all([
+      const [scoreboardRes, challengesRes, activityRes] = await Promise.all([
         api.get('/scoreboard'),
-        api.get('/scoreboard/timer'),
         api.get('/challenges'),
         api.get('/scoreboard/activity')
       ]);
       setTeams(scoreboardRes.data.scoreboard as ScoreboardTeam[]);
-      setTimer(timerRes.data.timer as CtfTimerState);
       setChallenges(challengesRes.data.challenges as Challenge[]);
       setActivity(activityRes.data.activities as ActivityItem[]);
     } catch (err) {
@@ -77,8 +76,18 @@ function AdminPage(): JSX.Element {
     }
   };
 
+  const fetchTimer = async (): Promise<void> => {
+    try {
+      const timerRes = await api.get('/scoreboard/timer');
+      setTimer(timerRes.data.timer as CtfTimerState);
+    } catch (err) {
+      console.error('Error fetching timer:', err);
+    }
+  };
+
   useEffect(() => {
     fetchData();
+    fetchTimer();
 
     let active = true;
     let cleanup: (() => void) | undefined;
@@ -101,11 +110,15 @@ function AdminPage(): JSX.Element {
     const interval = window.setInterval(() => {
       void fetchData();
     }, 2000);
+    const timerInterval = window.setInterval(() => {
+      void fetchTimer();
+    }, 1000);
 
     return () => {
       active = false;
       cleanup?.();
       window.clearInterval(interval);
+      window.clearInterval(timerInterval);
     };
   }, []);
 
@@ -186,11 +199,18 @@ function AdminPage(): JSX.Element {
   };
 
   const handleShareTeam = async (team: ScoreboardTeam): Promise<void> => {
+    setSharingTeamIds((prev) => ({ ...prev, [team.id]: true }));
     try {
       await api.post(`/auth/admin/teams/${team.id}/share`);
       setSharedTeamEmailState((prev) => ({ ...prev, [team.id]: String(team.team_leader_email || '').toLowerCase() }));
     } catch {
       // handled by global notifications
+    } finally {
+      setSharingTeamIds((prev) => {
+        const next = { ...prev };
+        delete next[team.id];
+        return next;
+      });
     }
   };
 
@@ -349,9 +369,12 @@ function AdminPage(): JSX.Element {
     anchor.remove();
     URL.revokeObjectURL(url);
   };
-  const allLeaderEmailsEdited = teams.every((team) => {
+  const hasPendingTeamEdit = (team: ScoreboardTeam): boolean => {
     const leaderEmail = String(team.team_leader_email || '').trim().toLowerCase();
-    return leaderEmail.length > 0 && leaderEmail !== defaultLeaderEmail(team.name);
+    return leaderEmail.length === 0 || leaderEmail === defaultLeaderEmail(team.name);
+  };
+  const allLeaderEmailsEdited = teams.every((team) => {
+    return !hasPendingTeamEdit(team);
   });
 
   return (
@@ -434,10 +457,11 @@ function AdminPage(): JSX.Element {
             <Card.Header className="d-flex justify-content-between align-items-center gap-2">
               <h5 className="mb-0 section-title">{t('adminRegisteredTeams')}</h5>
               <Button
-                variant="primary"
+                variant={isSendingAllCreds ? 'secondary' : 'primary'}
                 size="sm"
                 onClick={() => void handleShareAllTeams()}
                 disabled={isSendingAllCreds || !allLeaderEmailsEdited}
+                className={isSendingAllCreds ? 'btn-pressed-grey' : undefined}
                 title={!allLeaderEmailsEdited ? t('adminTeamShareAllBlockedHint') : undefined}
               >
                 {isSendingAllCreds ? t('adminTeamShareAllSending') : t('adminTeamShareAll')}
@@ -458,7 +482,7 @@ function AdminPage(): JSX.Element {
                   {teams.map((team) => (
                     <tr key={team.id}>
                       <td>{rankLabel(team.rank)}</td>
-                      <td>{team.name}</td>
+                      <td>{hasPendingTeamEdit(team) ? `*${team.name}` : team.name}</td>
                       <td>
                         <strong>{team.score}</strong>
                       </td>
@@ -470,6 +494,7 @@ function AdminPage(): JSX.Element {
                           const isShared =
                             leaderEmail.length > 0 &&
                             (sharedTeamEmailState[team.id] === leaderEmail || persistedSharedEmail === leaderEmail);
+                          const isSharingTeam = Boolean(sharingTeamIds[team.id]);
                           return (
                             <>
                         <Button variant="primary" size="sm" className="me-2" onClick={() => openEditTeamModal(team)}>
@@ -479,13 +504,13 @@ function AdminPage(): JSX.Element {
                           {t('adminView')}
                         </Button>
                         <Button
-                          variant={isShared ? 'success' : 'outline-primary'}
+                          variant={isSharingTeam ? 'secondary' : isShared ? 'success' : 'outline-primary'}
                           size="sm"
-                          className="me-2"
+                          className={`me-2${isSharingTeam ? ' btn-pressed-grey' : ''}`}
                           onClick={() => void handleShareTeam(team)}
-                          disabled={isShared}
+                          disabled={isShared || isSendingAllCreds || isSharingTeam}
                         >
-                          {isShared ? t('adminTeamShared') : t('adminTeamShare')}
+                          {isShared ? t('adminTeamShared') : isSharingTeam ? t('adminTeamShareAllSending') : t('adminTeamShare')}
                         </Button>
                         <Button
                           variant="danger"

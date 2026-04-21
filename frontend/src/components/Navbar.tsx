@@ -36,6 +36,7 @@ function Navbar(): JSX.Element {
   const [adminOvaLink, setAdminOvaLink] = useState('');
   const [adminPlatformLink, setAdminPlatformLink] = useState('');
   const [adminCredsTemplate, setAdminCredsTemplate] = useState('');
+  const [adminEmailSubject, setAdminEmailSubject] = useState('');
   const [adminMailError, setAdminMailError] = useState('');
   const [adminMailSuccess, setAdminMailSuccess] = useState('');
   const [adminMailLoading, setAdminMailLoading] = useState(false);
@@ -106,6 +107,7 @@ function Navbar(): JSX.Element {
         setAdminOvaLink(String(response.data.ovaLink || 'https://drive.google.com'));
         setAdminPlatformLink(String(response.data.platformLink || 'https://ctf.link'));
         setAdminCredsTemplate(String(response.data.credentialsTemplate || ''));
+        setAdminEmailSubject(String(response.data.emailSubject || 'HIU Selection ENI 2026 - CTF Platform Instructions'));
       })
       .catch((err: any) => {
         setAdminMailError(localizeApiMessage(err.response?.data?.error || t('apiDatabaseError')));
@@ -124,7 +126,8 @@ function Navbar(): JSX.Element {
         appPassword: adminSenderPassword,
         ovaLink: adminOvaLink.trim(),
         platformLink: adminPlatformLink.trim(),
-        credentialsTemplate: adminCredsTemplate
+        credentialsTemplate: adminCredsTemplate,
+        emailSubject: adminEmailSubject.trim()
       });
       setAdminMailSuccess(localizeApiMessage(response.data.message || 'Sender credentials updated'));
     } catch (err: any) {
@@ -314,7 +317,7 @@ function Navbar(): JSX.Element {
                 type="email"
                 value={adminSenderEmail}
                 onChange={(e) => setAdminSenderEmail(e.target.value)}
-                placeholder="admin@selection.hiu"
+                placeholder="c3lf.business@gmail.com"
                 required
               />
             </Form.Group>
@@ -355,6 +358,15 @@ function Navbar(): JSX.Element {
                 value={adminPlatformLink}
                 onChange={(e) => setAdminPlatformLink(e.target.value)}
                 placeholder="https://ctf.link"
+                required
+              />
+            </Form.Group>
+            <Form.Group className="mt-3">
+              <Form.Label>{t('adminEmailHeaderLabel')}</Form.Label>
+              <Form.Control
+                type="text"
+                value={adminEmailSubject}
+                onChange={(e) => setAdminEmailSubject(e.target.value)}
                 required
               />
             </Form.Group>

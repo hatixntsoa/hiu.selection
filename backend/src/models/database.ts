@@ -15,34 +15,35 @@ const ADMIN_SENDER_APP_PASSWORD_CONFIG_KEY = 'admin_sender_app_password';
 const ADMIN_OVA_LINK_CONFIG_KEY = 'admin_ova_link';
 const ADMIN_PLATFORM_LINK_CONFIG_KEY = 'admin_platform_link';
 const ADMIN_CREDENTIALS_TEMPLATE_CONFIG_KEY = 'admin_credentials_template';
-const DEFAULT_ADMIN_SENDER_EMAIL = 'admin@selection.hiu';
+const ADMIN_EMAIL_SUBJECT_CONFIG_KEY = 'admin_email_subject';
+const DEFAULT_ADMIN_SENDER_EMAIL = 'c3lf.business@gmail.com';
 const DEFAULT_ADMIN_OVA_LINK = 'https://drive.google.com';
 const DEFAULT_ADMIN_PLATFORM_LINK = 'https://ctf.link';
-const DEFAULT_CREDENTIALS_TEMPLATE = `Hello Team <current_team_name_here>,
+const DEFAULT_ADMIN_EMAIL_SUBJECT = 'HIU Selection ENI 2026 - CTF Platform Instructions';
+const DEFAULT_CREDENTIALS_TEMPLATE = `Greetings Team <current_team_name_here>,
 
-Welcome to HIU Selection CTF 2026 !
+Welcome to the HIU Selection CTF 2026.
 
-First, here is the CTF Platform link :
-<ctf_platform_link_here>
+Please find below the necessary information to get started.
 
-In order to submit flags on it, you will have
-to login using the following credentials :
-
-username : <current_team_name_here>
-password : <current_team_password>
-
-Oh and btw here is the VM as .ova file
-that you will try to get into :
-
+- Download the virtual machine (.ova file) for the challenge using the link below:
 <google_drive_ova_file_link_here>
 
+- CTF Platform link:
+<ctf_platform_link_here>
 
-Have fun, Hack the planet !
+To submit flags, log in using the following credentials:
 
-I'll let you all cook now, break a leg.
+- username : <current_team_name_here>
+- password : <current_team_password>
 
-Sincerely,
+
+We encourage you to explore, collaborate, and make the most of this experience. 
+Best of luck, and enjoy the challenge.
+
+Kind regards,
 C3LF`;
+
 const DEFAULT_TIMER_DURATION_SECONDS = 6 * 60 * 60;
 const DEFAULT_TEAM_COUNT = 15;
 const DEFAULT_TEAM_PASSWORD_LENGTH = 20;
@@ -486,6 +487,10 @@ function initializeDatabase(): void {
     db!.run(
       `INSERT OR IGNORE INTO app_config (key, value) VALUES (?, ?)`,
       [ADMIN_CREDENTIALS_TEMPLATE_CONFIG_KEY, DEFAULT_CREDENTIALS_TEMPLATE]
+    );
+    db!.run(
+      `INSERT OR IGNORE INTO app_config (key, value) VALUES (?, ?)`,
+      [ADMIN_EMAIL_SUBJECT_CONFIG_KEY, DEFAULT_ADMIN_EMAIL_SUBJECT]
     );
 
     for (let index = 1; index <= DEFAULT_TEAM_COUNT; index += 1) {

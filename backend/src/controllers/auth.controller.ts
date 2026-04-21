@@ -15,32 +15,32 @@ const ADMIN_SENDER_APP_PASSWORD_CONFIG_KEY = 'admin_sender_app_password';
 const ADMIN_OVA_LINK_CONFIG_KEY = 'admin_ova_link';
 const ADMIN_PLATFORM_LINK_CONFIG_KEY = 'admin_platform_link';
 const ADMIN_CREDENTIALS_TEMPLATE_CONFIG_KEY = 'admin_credentials_template';
+const ADMIN_EMAIL_SUBJECT_CONFIG_KEY = 'admin_email_subject';
 const DEFAULT_ADMIN_OVA_LINK = 'https://drive.google.com';
 const DEFAULT_ADMIN_PLATFORM_LINK = 'https://ctf.link';
-const DEFAULT_CREDENTIALS_TEMPLATE = `Hello Team <current_team_name_here>,
+const DEFAULT_ADMIN_EMAIL_SUBJECT = 'HIU Selection ENI 2026 - CTF Platform Instructions';
+const DEFAULT_CREDENTIALS_TEMPLATE = `Greetings Team <current_team_name_here>,
 
-Welcome to HIU Selection CTF 2026 !
+Welcome to the HIU Selection CTF 2026.
 
-First, here is the CTF Platform link :
-<ctf_platform_link_here>
+Please find below the necessary information to get started.
 
-In order to submit flags on it, you will have
-to login using the following credentials :
-
-username : <current_team_name_here>
-password : <current_team_password>
-
-Oh and btw here is the VM as .ova file
-that you will try to get into :
-
+- Download the virtual machine (.ova file) for the challenge using the link below:
 <google_drive_ova_file_link_here>
 
+- CTF Platform link:
+<ctf_platform_link_here>
 
-Have fun, Hack the planet !
+To submit flags, log in using the following credentials:
 
-I'll let you all cook now, break a leg.
+- username : <current_team_name_here>
+- password : <current_team_password>
 
-Sincerely,
+
+We encourage you to explore, collaborate, and make the most of this experience. 
+Best of luck, and enjoy the challenge.
+
+Kind regards,
 C3LF`;
 
 function getJwtOptions(): SignOptions {
@@ -721,13 +721,14 @@ export async function getAdminSenderConfig(_req: Request, res: Response): Promis
   try {
     const rows = await dbAll<{ key: string; value: string }>(
       db,
-      'SELECT key, value FROM app_config WHERE key IN (?, ?, ?, ?, ?)',
+      'SELECT key, value FROM app_config WHERE key IN (?, ?, ?, ?, ?, ?)',
       [
         ADMIN_SENDER_EMAIL_CONFIG_KEY,
         ADMIN_SENDER_APP_PASSWORD_CONFIG_KEY,
         ADMIN_OVA_LINK_CONFIG_KEY,
         ADMIN_PLATFORM_LINK_CONFIG_KEY,
-        ADMIN_CREDENTIALS_TEMPLATE_CONFIG_KEY
+        ADMIN_CREDENTIALS_TEMPLATE_CONFIG_KEY,
+        ADMIN_EMAIL_SUBJECT_CONFIG_KEY
       ]
     );
     const map = new Map(rows.map((row) => [row.key, row.value]));
@@ -736,7 +737,8 @@ export async function getAdminSenderConfig(_req: Request, res: Response): Promis
       appPassword: map.get(ADMIN_SENDER_APP_PASSWORD_CONFIG_KEY) || '',
       ovaLink: map.get(ADMIN_OVA_LINK_CONFIG_KEY) || DEFAULT_ADMIN_OVA_LINK,
       platformLink: map.get(ADMIN_PLATFORM_LINK_CONFIG_KEY) || DEFAULT_ADMIN_PLATFORM_LINK,
-      credentialsTemplate: map.get(ADMIN_CREDENTIALS_TEMPLATE_CONFIG_KEY) || DEFAULT_CREDENTIALS_TEMPLATE
+      credentialsTemplate: map.get(ADMIN_CREDENTIALS_TEMPLATE_CONFIG_KEY) || DEFAULT_CREDENTIALS_TEMPLATE,
+      emailSubject: map.get(ADMIN_EMAIL_SUBJECT_CONFIG_KEY) || DEFAULT_ADMIN_EMAIL_SUBJECT
     });
   } catch {
     return res.status(500).json({ error: 'Database error' });
@@ -744,12 +746,13 @@ export async function getAdminSenderConfig(_req: Request, res: Response): Promis
 }
 
 export async function updateAdminSenderConfig(_req: Request, res: Response): Promise<Response> {
-  const { senderEmail, appPassword, ovaLink, platformLink, credentialsTemplate } = _req.body as {
+  const { senderEmail, appPassword, ovaLink, platformLink, credentialsTemplate, emailSubject } = _req.body as {
     senderEmail?: string;
     appPassword?: string;
     ovaLink?: string;
     platformLink?: string;
     credentialsTemplate?: string;
+    emailSubject?: string;
   };
   if (!senderEmail || !appPassword || !isLikelyEmail(senderEmail.trim())) {
     return res.status(400).json({ error: 'Sender email and app password are required' });
@@ -757,6 +760,7 @@ export async function updateAdminSenderConfig(_req: Request, res: Response): Pro
   const normalizedOvaLink = String(ovaLink || '').trim() || DEFAULT_ADMIN_OVA_LINK;
   const normalizedPlatformLink = String(platformLink || '').trim() || DEFAULT_ADMIN_PLATFORM_LINK;
   const normalizedTemplate = String(credentialsTemplate || '').trim() || DEFAULT_CREDENTIALS_TEMPLATE;
+  const normalizedEmailSubject = String(emailSubject || '').trim() || DEFAULT_ADMIN_EMAIL_SUBJECT;
   if (!/^https?:\/\//i.test(normalizedOvaLink)) {
     return res.status(400).json({ error: 'Valid OVA link is required' });
   }
@@ -811,6 +815,12 @@ export async function updateAdminSenderConfig(_req: Request, res: Response): Pro
        ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
       [ADMIN_CREDENTIALS_TEMPLATE_CONFIG_KEY, normalizedTemplate]
     );
+    await dbRun(
+      db,
+      `INSERT INTO app_config (key, value) VALUES (?, ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      [ADMIN_EMAIL_SUBJECT_CONFIG_KEY, normalizedEmailSubject]
+    );
     logAction('admin.sender.update', `sender=${normalizedEmail}`);
     return res.json({ message: 'Sender credentials updated' });
   } catch {
@@ -847,13 +857,14 @@ export async function shareTeamCredentialsByAdmin(req: Request, res: Response): 
 
     const configRows = await dbAll<{ key: string; value: string }>(
       db,
-      'SELECT key, value FROM app_config WHERE key IN (?, ?, ?, ?, ?)',
+      'SELECT key, value FROM app_config WHERE key IN (?, ?, ?, ?, ?, ?)',
       [
         ADMIN_SENDER_EMAIL_CONFIG_KEY,
         ADMIN_SENDER_APP_PASSWORD_CONFIG_KEY,
         ADMIN_OVA_LINK_CONFIG_KEY,
         ADMIN_PLATFORM_LINK_CONFIG_KEY,
-        ADMIN_CREDENTIALS_TEMPLATE_CONFIG_KEY
+        ADMIN_CREDENTIALS_TEMPLATE_CONFIG_KEY,
+        ADMIN_EMAIL_SUBJECT_CONFIG_KEY
       ]
     );
     const configMap = new Map(configRows.map((row) => [row.key, row.value]));
@@ -862,6 +873,7 @@ export async function shareTeamCredentialsByAdmin(req: Request, res: Response): 
     const ovaLink = configMap.get(ADMIN_OVA_LINK_CONFIG_KEY) || DEFAULT_ADMIN_OVA_LINK;
     const platformLink = configMap.get(ADMIN_PLATFORM_LINK_CONFIG_KEY) || DEFAULT_ADMIN_PLATFORM_LINK;
     const template = configMap.get(ADMIN_CREDENTIALS_TEMPLATE_CONFIG_KEY) || DEFAULT_CREDENTIALS_TEMPLATE;
+    const emailSubject = configMap.get(ADMIN_EMAIL_SUBJECT_CONFIG_KEY) || DEFAULT_ADMIN_EMAIL_SUBJECT;
     if (!senderEmail || !senderPassword) {
       return res.status(400).json({ error: 'Admin sender credentials are not configured' });
     }
@@ -883,7 +895,7 @@ export async function shareTeamCredentialsByAdmin(req: Request, res: Response): 
     await transporter.sendMail({
       from: senderEmail,
       to: leaderEmail,
-      subject: `CTF Team Credentials - ${team.name}`,
+      subject: emailSubject,
       text: body
     });
     await dbRun(db, 'UPDATE teams SET creds_shared_email = ? WHERE id = ?', [leaderEmail.toLowerCase(), teamId]);

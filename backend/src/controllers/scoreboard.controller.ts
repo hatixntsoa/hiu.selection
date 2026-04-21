@@ -45,38 +45,56 @@ async function buildScoreboardPdfBuffer(rows: ExportScoreboardRow[]): Promise<Bu
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', (err) => reject(err));
 
-    doc.fontSize(18).text('Selection HIU 2026 - CTF', { align: 'left' });
-    doc.moveDown(1);
-    doc.fillColor('#000');
+    const marginX = 40;
+    const pageTop = 40;
+    const pageBottom = 800;
+    const tableTop = 60;
+    const headerHeight = 26;
+    const rowHeight = 24;
+    const rankWidth = 70;
+    const teamWidth = 280;
+    const rawWidth = 85;
+    const scoreThirtyWidth = 80;
+    const tableWidth = rankWidth + teamWidth + rawWidth + scoreThirtyWidth;
+    const colX = {
+      rank: marginX,
+      team: marginX + rankWidth,
+      raw: marginX + rankWidth + teamWidth,
+      scoreThirty: marginX + rankWidth + teamWidth + rawWidth
+    };
 
-    const startX = 40;
-    const rankX = startX;
-    const teamX = 110;
-    const scoreX = 390;
-    const scoreThirtyX = 470;
-    let y = 120;
+    const drawHeader = (y: number): number => {
+      doc.font('Helvetica-Bold').fontSize(11);
+      doc.fillColor('#34495E').rect(marginX, y, tableWidth, headerHeight).fill();
+      doc.fillColor('#FFFFFF');
+      doc.text('Rank', colX.rank + 6, y + 8, { width: rankWidth - 12, align: 'left' });
+      doc.text('Team Name', colX.team + 6, y + 8, { width: teamWidth - 12, align: 'left' });
+      doc.text('Raw Points', colX.raw + 6, y + 8, { width: rawWidth - 12, align: 'left' });
+      doc.text('Score /30', colX.scoreThirty + 6, y + 8, { width: scoreThirtyWidth - 12, align: 'left' });
+      doc.fillColor('#111111');
+      return y + headerHeight;
+    };
 
-    doc.fontSize(11).font('Helvetica-Bold');
-    doc.text('Rank', rankX, y);
-    doc.text('Team', teamX, y);
-    doc.text('Raw Points', scoreX, y);
-    doc.text('Score /30', scoreThirtyX, y);
-    y += 18;
-    doc.moveTo(startX, y).lineTo(555, y).strokeColor('#cccccc').stroke();
-    y += 8;
-
-    doc.font('Helvetica').fontSize(10).fillColor('#111');
-    rows.forEach((row) => {
+    const drawRow = (y: number, row: ExportScoreboardRow): number => {
       const rank = row.rank ? String(row.rank) : '-';
-      doc.text(rank, rankX, y);
-      doc.text(row.name, teamX, y, { width: 290, ellipsis: true });
-      doc.text(String(row.score), scoreX, y);
-      doc.text(row.scoreOverThirty, scoreThirtyX, y);
-      y += 18;
-      if (y > 760) {
+      doc.rect(marginX, y, tableWidth, rowHeight).strokeColor('#DADADA').lineWidth(1).stroke();
+      doc.font('Helvetica').fontSize(11).fillColor('#111111');
+      doc.text(rank, colX.rank + 6, y + 7, { width: rankWidth - 12, align: 'left' });
+      doc.text(row.name, colX.team + 6, y + 7, { width: teamWidth - 12, align: 'left', ellipsis: true });
+      doc.text(String(row.score), colX.raw + 6, y + 7, { width: rawWidth - 12, align: 'left' });
+      doc.text(row.scoreOverThirty, colX.scoreThirty + 6, y + 7, { width: scoreThirtyWidth - 12, align: 'left' });
+      return y + rowHeight;
+    };
+
+    doc.fontSize(16).fillColor('#111111').text('Selection HIU 2026 - CTF', marginX, pageTop);
+    let y = drawHeader(tableTop);
+
+    rows.forEach((row) => {
+      if (y + rowHeight > pageBottom) {
         doc.addPage();
-        y = 60;
+        y = drawHeader(pageTop);
       }
+      y = drawRow(y, row);
     });
 
     doc.end();

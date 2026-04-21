@@ -725,6 +725,10 @@ h6,
   border-radius: 10px;
   border-width: 1px;
   border-style: solid;
+  background: color-mix(in srgb, var(--warm-surface) 68%, transparent);
+  border-color: color-mix(in srgb, var(--warm-border) 85%, transparent);
+  backdrop-filter: blur(14px) saturate(120%);
+  -webkit-backdrop-filter: blur(14px) saturate(120%);
   box-shadow: 0 12px 24px rgba(0, 0, 0, 0.14);
   min-width: 340px;
   animation: slide-notification 260ms ease-out;
@@ -735,21 +739,27 @@ h6,
 }
 
 .app-notification-success {
-  background: color-mix(in srgb, var(--warm-success) 14%, transparent);
+  background: color-mix(in srgb, var(--warm-success) 12%, var(--warm-surface));
   border-color: color-mix(in srgb, var(--warm-success) 35%, transparent);
   color: var(--warm-success);
 }
 
 .app-notification-error {
-  background: color-mix(in srgb, var(--warm-danger) 12%, transparent);
+  background: color-mix(in srgb, var(--warm-danger) 10%, var(--warm-surface));
   border-color: color-mix(in srgb, var(--warm-danger) 38%, transparent);
   color: var(--warm-danger);
 }
 
 .app-notification-alert {
-  background: color-mix(in srgb, var(--warm-warning) 14%, transparent);
+  background: color-mix(in srgb, var(--warm-warning) 12%, var(--warm-surface));
   border-color: color-mix(in srgb, var(--warm-warning) 36%, transparent);
   color: var(--warm-warning);
+}
+
+.btn-pressed-grey {
+  background: color-mix(in srgb, var(--warm-muted) 38%, transparent) !important;
+  border-color: color-mix(in srgb, var(--warm-muted) 55%, transparent) !important;
+  color: var(--warm-text) !important;
 }
 
 .live-solve-toast {

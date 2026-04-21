@@ -55,12 +55,7 @@ export async function submitFlag(req: Request, res: Response, io?: Server): Prom
     }
 
     if (!challenge) {
-      res.json({
-        correct: false,
-        message: 'Incorrect flag. Try again!',
-        points: 0
-      });
-      return;
+      return res.status(400).json({ error: 'Incorrect flag. Try again!' });
     }
 
     db.get(

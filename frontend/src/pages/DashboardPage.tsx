@@ -4,15 +4,10 @@ import { useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { usePreferences } from '../context/PreferencesContext';
 import api from '../services/api';
+import { notify } from '../services/notifications';
 import Scoreboard from '../components/Dashboard/Scoreboard';
 import LiveFeed from '../components/Dashboard/LiveFeed';
 import { ActivityItem, Challenge, CtfTimerState, ScoreboardTeam, SubmissionHistoryItem } from '../types';
-
-type FlagResult = {
-  correct: boolean;
-  message: string;
-  points: number;
-};
 
 type DashboardSection = 'ranking' | 'live-activity' | 'submission';
 
@@ -94,14 +89,12 @@ function DashboardPage(): JSX.Element {
   }, [section]);
 
   const { user, updateUser } = useAuth();
-  const { t, localizeApiMessage } = usePreferences();
+  const { t } = usePreferences();
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [scoreboard, setScoreboard] = useState<ScoreboardTeam[]>([]);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [solvedChallenges, setSolvedChallenges] = useState<Set<number>>(new Set());
   const [flagInput, setFlagInput] = useState('');
-  const [result, setResult] = useState<FlagResult | null>(null);
-  const [error, setError] = useState('');
   const [timer, setTimer] = useState<CtfTimerState | null>(null);
 
   const fetchData = async (): Promise<void> => {
@@ -163,17 +156,6 @@ function DashboardPage(): JSX.Element {
   }, []);
 
   useEffect(() => {
-    if (!result && !error) {
-      return;
-    }
-    const timeout = window.setTimeout(() => {
-      setResult(null);
-      setError('');
-    }, 5000);
-    return () => window.clearTimeout(timeout);
-  }, [result, error]);
-
-  useEffect(() => {
     const interval = window.setInterval(() => {
       api
         .get('/scoreboard/timer')
@@ -185,16 +167,14 @@ function DashboardPage(): JSX.Element {
 
   const handleSubmitFlag = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
-    setError('');
-    setResult(null);
 
     if (timer && !timer.canSubmit) {
-      setError(t('timerSubmissionsClosed'));
+      notify('error', t('timerSubmissionsClosed'));
       return;
     }
 
     if (!flagInput) {
-      setError(t('dashboardNeedFlagOnly'));
+      notify('error', t('dashboardNeedFlagOnly'));
       return;
     }
 
@@ -202,18 +182,16 @@ function DashboardPage(): JSX.Element {
       const response = await api.post('/flags/submit', {
         flag: flagInput
       });
-
-      const responseResult = response.data as FlagResult;
-      setResult(responseResult);
-
-      if (responseResult.correct) {
+      if ((response.data as { correct?: boolean }).correct) {
         setFlagInput('');
-        updateUser({ score: (user?.score || 0) + responseResult.points });
+        updateUser({ score: (user?.score || 0) + Number((response.data as { points?: number }).points || 0) });
         await celebrateSolve();
         fetchData();
       }
     } catch (err: any) {
-      setError(localizeApiMessage(err.response?.data?.error || t('dashboardSubmitFailed')));
+      if (!err?.response?.data?.error) {
+        notify('error', t('dashboardSubmitFailed'));
+      }
     }
   };
 
@@ -304,16 +282,6 @@ function DashboardPage(): JSX.Element {
                   disabled={challengesDisabled}
                 />
               </Form.Group>
-              {result && (
-                <Alert variant={result.correct ? 'success' : 'danger'} className="mt-2 mb-0">
-                  {localizeApiMessage(result.message)} {result.correct && `+${result.points} ${t('scoreboardPoints').toLowerCase()}!`}
-                </Alert>
-              )}
-              {error && (
-                <Alert variant="danger" className="mt-2 mb-0">
-                  {error}
-                </Alert>
-              )}
               <div className="mt-3">
                 <Button variant="primary" type="submit" disabled={challengesDisabled}>
                   {t('dashboardSubmitButton')}
