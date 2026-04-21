@@ -28,6 +28,7 @@ function AdminPage(): JSX.Element {
   const [editTeamSuccess, setEditTeamSuccess] = useState('');
   const [editTeamLoading, setEditTeamLoading] = useState(false);
   const [sharedTeamEmailState, setSharedTeamEmailState] = useState<Record<number, string>>({});
+  const [isSendingAllCreds, setIsSendingAllCreds] = useState(false);
   const [showTeamDetailsModal, setShowTeamDetailsModal] = useState(false);
   const [teamDetails, setTeamDetails] = useState<AdminTeamDetails | null>(null);
   const [teamDetailsLoading, setTeamDetailsLoading] = useState(false);
@@ -36,7 +37,7 @@ function AdminPage(): JSX.Element {
   const liveScoreboardRef = useRef<HTMLDivElement | null>(null);
   const { t, language, localizeApiMessage } = usePreferences();
   const currentSection =
-    section === 'teams' || section === 'activity' || section === 'timer' || section === 'live-scoreboard' || section === 'scoreboard'
+    section === 'teams' || section === 'activity' || section === 'timer' || section === 'live-scoreboard' || section === 'scoreboard' || section === 'data-export'
       ? section
       : 'flags';
   const isLiveScoreboardRoute = currentSection === 'live-scoreboard';
@@ -56,6 +57,8 @@ function AdminPage(): JSX.Element {
     }
     return t('difficultyEasy');
   };
+
+  const defaultLeaderEmail = (teamName: string): string => `${teamName.toLowerCase().replace(/[^a-z0-9]+/g, '_')}_leader@example.com`;
 
   const fetchData = async (): Promise<void> => {
     try {
@@ -191,6 +194,28 @@ function AdminPage(): JSX.Element {
     }
   };
 
+  const handleShareAllTeams = async (): Promise<void> => {
+    const orderedTeams = [...teams];
+    setIsSendingAllCreds(true);
+    try {
+      for (const team of orderedTeams) {
+        const leaderEmail = String(team.team_leader_email || '').toLowerCase();
+        const isShared = leaderEmail.length > 0 && sharedTeamEmailState[team.id] === leaderEmail;
+        if (isShared) {
+          continue;
+        }
+        try {
+          await api.post(`/auth/admin/teams/${team.id}/share`);
+          setSharedTeamEmailState((prev) => ({ ...prev, [team.id]: leaderEmail }));
+        } catch {
+          // handled by global notifications, continue with next team
+        }
+      }
+    } finally {
+      setIsSendingAllCreds(false);
+    }
+  };
+
   const handleDeleteTeam = async (): Promise<void> => {
     if (!deletingTeam) {
       return;
@@ -310,6 +335,25 @@ function AdminPage(): JSX.Element {
     doc.save('selection-hiu-2026-ctf-scoreboard.pdf');
   };
 
+  const exportDataBundle = async (): Promise<void> => {
+    const response = await api.get('/scoreboard/export', { responseType: 'blob' });
+    const filenameHeader = String(response.headers['content-disposition'] || '');
+    const match = /filename="([^"]+)"/.exec(filenameHeader);
+    const filename = match?.[1] || `hiu-selection-data-exported-${new Date().toISOString().replace(/[:.]/g, '-')}.zip`;
+    const url = URL.createObjectURL(response.data as Blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  };
+  const allLeaderEmailsEdited = teams.every((team) => {
+    const leaderEmail = String(team.team_leader_email || '').trim().toLowerCase();
+    return leaderEmail.length > 0 && leaderEmail !== defaultLeaderEmail(team.name);
+  });
+
   return (
     <Container fluid>
       {isLiveScoreboardRoute ? (
@@ -374,10 +418,30 @@ function AdminPage(): JSX.Element {
               </Table>
             </Card.Body>
           </Card>
-      ) : currentSection === 'teams' ? (
+      ) : currentSection === 'data-export' ? (
           <Card className="mt-3 soft-card">
             <Card.Header>
+              <h5 className="mb-0 section-title">{t('adminTabDataExport')}</h5>
+            </Card.Header>
+            <Card.Body className="d-flex justify-content-center py-5">
+              <Button size="lg" variant="primary" onClick={() => void exportDataBundle()}>
+                {t('adminExportDataButton')}
+              </Button>
+            </Card.Body>
+          </Card>
+      ) : currentSection === 'teams' ? (
+          <Card className="mt-3 soft-card">
+            <Card.Header className="d-flex justify-content-between align-items-center gap-2">
               <h5 className="mb-0 section-title">{t('adminRegisteredTeams')}</h5>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => void handleShareAllTeams()}
+                disabled={isSendingAllCreds || !allLeaderEmailsEdited}
+                title={!allLeaderEmailsEdited ? t('adminTeamShareAllBlockedHint') : undefined}
+              >
+                {isSendingAllCreds ? t('adminTeamShareAllSending') : t('adminTeamShareAll')}
+              </Button>
             </Card.Header>
             <Card.Body>
               <Table striped bordered hover responsive className="warm-table">
@@ -402,7 +466,10 @@ function AdminPage(): JSX.Element {
                       <td style={{ whiteSpace: 'nowrap' }}>
                         {(() => {
                           const leaderEmail = String(team.team_leader_email || '').toLowerCase();
-                          const isShared = leaderEmail.length > 0 && sharedTeamEmailState[team.id] === leaderEmail;
+                          const persistedSharedEmail = String(team.creds_shared_email || '').toLowerCase();
+                          const isShared =
+                            leaderEmail.length > 0 &&
+                            (sharedTeamEmailState[team.id] === leaderEmail || persistedSharedEmail === leaderEmail);
                           return (
                             <>
                         <Button variant="primary" size="sm" className="me-2" onClick={() => openEditTeamModal(team)}>

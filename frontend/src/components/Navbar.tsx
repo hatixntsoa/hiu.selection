@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Alert, Badge, Button, Container, Form, InputGroup, Modal, Nav, Navbar as BSNavbar } from 'react-bootstrap';
+import { Alert, Badge, Button, Container, Form, InputGroup, Modal, Nav, Navbar as BSNavbar, Table } from 'react-bootstrap';
 import { useAuth } from '../context/AuthContext';
 import { usePreferences } from '../context/PreferencesContext';
 import api from '../services/api';
@@ -34,6 +34,8 @@ function Navbar(): JSX.Element {
   const [adminSenderEmail, setAdminSenderEmail] = useState('');
   const [adminSenderPassword, setAdminSenderPassword] = useState('');
   const [adminOvaLink, setAdminOvaLink] = useState('');
+  const [adminPlatformLink, setAdminPlatformLink] = useState('');
+  const [adminCredsTemplate, setAdminCredsTemplate] = useState('');
   const [adminMailError, setAdminMailError] = useState('');
   const [adminMailSuccess, setAdminMailSuccess] = useState('');
   const [adminMailLoading, setAdminMailLoading] = useState(false);
@@ -102,6 +104,8 @@ function Navbar(): JSX.Element {
         setAdminSenderEmail(String(response.data.senderEmail || ''));
         setAdminSenderPassword(String(response.data.appPassword || ''));
         setAdminOvaLink(String(response.data.ovaLink || 'https://drive.google.com'));
+        setAdminPlatformLink(String(response.data.platformLink || 'https://ctf.link'));
+        setAdminCredsTemplate(String(response.data.credentialsTemplate || ''));
       })
       .catch((err: any) => {
         setAdminMailError(localizeApiMessage(err.response?.data?.error || t('apiDatabaseError')));
@@ -118,7 +122,9 @@ function Navbar(): JSX.Element {
       const response = await api.put('/auth/admin/sender-config', {
         senderEmail: adminSenderEmail.trim(),
         appPassword: adminSenderPassword,
-        ovaLink: adminOvaLink.trim()
+        ovaLink: adminOvaLink.trim(),
+        platformLink: adminPlatformLink.trim(),
+        credentialsTemplate: adminCredsTemplate
       });
       setAdminMailSuccess(localizeApiMessage(response.data.message || 'Sender credentials updated'));
     } catch (err: any) {
@@ -183,6 +189,9 @@ function Navbar(): JSX.Element {
                   </Nav.Link>
                   <Nav.Link as={Link} to="/admin/scoreboard" active={location.pathname === '/admin/scoreboard'}>
                     {t('adminTabScoreboard')}
+                  </Nav.Link>
+                  <Nav.Link as={Link} to="/admin/data-export" active={location.pathname === '/admin/data-export'}>
+                    {t('adminTabDataExport')}
                   </Nav.Link>
                   <Nav.Link as={Link} to="/admin/live-scoreboard" active={location.pathname === '/admin/live-scoreboard'}>
                     {t('adminTabLiveScoreboard')}
@@ -336,6 +345,26 @@ function Navbar(): JSX.Element {
                 value={adminOvaLink}
                 onChange={(e) => setAdminOvaLink(e.target.value)}
                 placeholder="https://drive.google.com"
+                required
+              />
+            </Form.Group>
+            <Form.Group className="mt-3">
+              <Form.Label>{t('adminPlatformLinkLabel')}</Form.Label>
+              <Form.Control
+                type="url"
+                value={adminPlatformLink}
+                onChange={(e) => setAdminPlatformLink(e.target.value)}
+                placeholder="https://ctf.link"
+                required
+              />
+            </Form.Group>
+            <Form.Group className="mt-3">
+              <Form.Label>{t('adminCredentialsTemplateLabel')}</Form.Label>
+              <Form.Control
+                as="textarea"
+                rows={12}
+                value={adminCredsTemplate}
+                onChange={(e) => setAdminCredsTemplate(e.target.value)}
                 required
               />
             </Form.Group>

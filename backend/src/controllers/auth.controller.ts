@@ -7,12 +7,41 @@ import sqlite3 from 'sqlite3';
 import { Server } from 'socket.io';
 import { getDatabase } from '../models/database';
 import { ChallengeDifficulty, TeamMemberRow, TeamRow } from '../types';
+import { logAction } from '../utils/action-logger';
 
 const MAX_TEAM_MEMBERS = 6;
 const ADMIN_SENDER_EMAIL_CONFIG_KEY = 'admin_sender_email';
 const ADMIN_SENDER_APP_PASSWORD_CONFIG_KEY = 'admin_sender_app_password';
 const ADMIN_OVA_LINK_CONFIG_KEY = 'admin_ova_link';
+const ADMIN_PLATFORM_LINK_CONFIG_KEY = 'admin_platform_link';
+const ADMIN_CREDENTIALS_TEMPLATE_CONFIG_KEY = 'admin_credentials_template';
 const DEFAULT_ADMIN_OVA_LINK = 'https://drive.google.com';
+const DEFAULT_ADMIN_PLATFORM_LINK = 'https://ctf.link';
+const DEFAULT_CREDENTIALS_TEMPLATE = `Hello Team <current_team_name_here>,
+
+Welcome to HIU Selection CTF 2026 !
+
+First, here is the CTF Platform link :
+<ctf_platform_link_here>
+
+In order to submit flags on it, you will have
+to login using the following credentials :
+
+username : <current_team_name_here>
+password : <current_team_password>
+
+Oh and btw here is the VM as .ova file
+that you will try to get into :
+
+<google_drive_ova_file_link_here>
+
+
+Have fun, Hack the planet !
+
+I'll let you all cook now, break a leg.
+
+Sincerely,
+C3LF`;
 
 function getJwtOptions(): SignOptions {
   const expiresIn = process.env.JWT_EXPIRES_IN || '24h';
@@ -96,6 +125,10 @@ function isLikelyEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
+function fillTemplate(template: string, replacements: Record<string, string>): string {
+  return Object.entries(replacements).reduce((current, [key, value]) => current.split(key).join(value), template);
+}
+
 export function register(req: Request, res: Response): Response | void {
   const { name, password } = req.body as { name?: string; password?: string };
 
@@ -144,6 +177,7 @@ export function register(req: Request, res: Response): Response | void {
 
           const token = jwt.sign({ id: teamId, name: trimmedName }, process.env.JWT_SECRET as string, getJwtOptions());
           emitRealtimeUpdates(req);
+          logAction('auth.register', `team=${trimmedName} id=${teamId}`);
 
           return res.status(201).json({
             message: 'Registration successful',
@@ -195,6 +229,7 @@ export function login(req: Request, res: Response): Response | void {
       }
 
       const token = jwt.sign({ id: team.id, name: team.name }, process.env.JWT_SECRET as string, getJwtOptions());
+      logAction('auth.login', `team=${team.name} id=${team.id}`);
       return res.json({
         message: 'Login successful',
         token,
@@ -284,7 +319,7 @@ export function updateTeam(req: Request, res: Response): Response | void {
                   return res.status(500).json({ error: 'Database error' });
                 }
 
-                syncTeamMemberCount(db, userId, (syncErr) => {
+            syncTeamMemberCount(db, userId, (syncErr) => {
                   if (syncErr) {
                     return res.status(500).json({ error: 'Database error' });
                   }
@@ -380,6 +415,7 @@ export function addTeamMember(req: Request, res: Response): Response | void {
               return res.status(500).json({ error: 'Database error' });
             }
             emitRealtimeUpdates(req);
+            logAction('team.member.add', `team_id=${userId} username=${trimmedUsername}`);
             return res.status(201).json({ message: 'Member added' });
           });
         });
@@ -436,11 +472,12 @@ export function updateTeamMember(req: Request, res: Response): Response | void {
             return res.status(400).json({ error: 'Username already exists' });
           }
 
-          db.run('UPDATE team_members SET username = ? WHERE id = ? AND team_id = ?', [trimmedUsername, memberId, userId], (updateErr) => {
+            db.run('UPDATE team_members SET username = ? WHERE id = ? AND team_id = ?', [trimmedUsername, memberId, userId], (updateErr) => {
             if (updateErr) {
               return res.status(500).json({ error: 'Database error' });
             }
             emitRealtimeUpdates(req);
+            logAction('team.member.update', `team_id=${userId} member_id=${memberId} username=${trimmedUsername}`);
             return res.json({ message: 'Member updated' });
           });
         }
@@ -482,6 +519,7 @@ export function deleteTeamMember(req: Request, res: Response): Response | void {
           return res.status(500).json({ error: 'Database error' });
         }
         emitRealtimeUpdates(req);
+        logAction('team.member.delete', `team_id=${userId} member_id=${memberId}`);
         return res.json({ message: 'Member deleted' });
       });
     });
@@ -538,6 +576,7 @@ export function deleteTeamByAdmin(req: Request, res: Response): Response | void 
               const io = req.app.get('io') as Server | undefined;
               io?.to(`team:${teamId}`).emit('team_deleted', { teamId });
               emitRealtimeUpdates(req);
+              logAction('admin.team.delete', `team=${team.name} id=${teamId}`);
               return res.json({ message: 'Team deleted' });
             });
           });
@@ -601,8 +640,8 @@ export async function updateTeamByAdmin(req: Request, res: Response): Promise<Re
   if (!Number.isInteger(teamId) || teamId <= 0) {
     return res.status(400).json({ error: 'Team not found' });
   }
-  if (!name || !name.trim() || !password) {
-    return res.status(400).json({ error: 'Username and password are required' });
+  if (!password) {
+    return res.status(400).json({ error: 'Password is required' });
   }
   if (password.length < 6) {
     return res.status(400).json({ error: 'Password must be at least 6 characters' });
@@ -611,17 +650,20 @@ export async function updateTeamByAdmin(req: Request, res: Response): Promise<Re
     return res.status(400).json({ error: 'Valid team leader email is required' });
   }
 
-  const trimmedName = name.trim();
   const trimmedLeaderEmail = teamLeaderEmail.trim().toLowerCase();
-  if (trimmedName.toLowerCase() === 'admin') {
-    return res.status(400).json({ error: 'Username is reserved' });
-  }
 
   const db = getDatabase();
   try {
-    const team = await dbGet<TeamRow>(db, 'SELECT id, is_admin FROM teams WHERE id = ?', [teamId]);
+    const team = await dbGet<TeamRow>(db, 'SELECT * FROM teams WHERE id = ?', [teamId]);
     if (!team || team.is_admin === 1) {
       return res.status(404).json({ error: 'Team not found' });
+    }
+    const trimmedName = String(name || team.name).trim();
+    if (!trimmedName) {
+      return res.status(400).json({ error: 'Username is required' });
+    }
+    if (trimmedName.toLowerCase() === 'admin') {
+      return res.status(400).json({ error: 'Username is reserved' });
     }
 
     const teamClash = await dbGet<{ id: number }>(db, 'SELECT id FROM teams WHERE id != ? AND name = ? COLLATE NOCASE', [teamId, trimmedName]);
@@ -647,6 +689,9 @@ export async function updateTeamByAdmin(req: Request, res: Response): Promise<Re
       'UPDATE teams SET name = ?, email = ?, password = ?, team_plain_password = ?, team_leader_email = ? WHERE id = ?',
       [trimmedName, toSyntheticEmail(trimmedName), hashedPassword, password, trimmedLeaderEmail, teamId]
     );
+    if ((team.team_leader_email || '').trim().toLowerCase() !== trimmedLeaderEmail) {
+      await dbRun(db, 'UPDATE teams SET creds_shared_email = NULL WHERE id = ?', [teamId]);
+    }
     await dbRun(db, 'UPDATE team_members SET username = ? WHERE team_id = ? AND is_primary = 1', [trimmedName, teamId]);
     await new Promise<void>((resolve, reject) => {
       syncTeamMemberCount(db, teamId, (syncErr) => {
@@ -664,6 +709,7 @@ export async function updateTeamByAdmin(req: Request, res: Response): Promise<Re
     }
 
     emitRealtimeUpdates(req);
+    logAction('admin.team.update', `team=${trimmedName} id=${teamId}`);
     return res.json({ message: 'Team updated by admin', team: teamPayload(freshTeam) });
   } catch {
     return res.status(500).json({ error: 'Database error' });
@@ -675,14 +721,22 @@ export async function getAdminSenderConfig(_req: Request, res: Response): Promis
   try {
     const rows = await dbAll<{ key: string; value: string }>(
       db,
-      'SELECT key, value FROM app_config WHERE key IN (?, ?, ?)',
-      [ADMIN_SENDER_EMAIL_CONFIG_KEY, ADMIN_SENDER_APP_PASSWORD_CONFIG_KEY, ADMIN_OVA_LINK_CONFIG_KEY]
+      'SELECT key, value FROM app_config WHERE key IN (?, ?, ?, ?, ?)',
+      [
+        ADMIN_SENDER_EMAIL_CONFIG_KEY,
+        ADMIN_SENDER_APP_PASSWORD_CONFIG_KEY,
+        ADMIN_OVA_LINK_CONFIG_KEY,
+        ADMIN_PLATFORM_LINK_CONFIG_KEY,
+        ADMIN_CREDENTIALS_TEMPLATE_CONFIG_KEY
+      ]
     );
     const map = new Map(rows.map((row) => [row.key, row.value]));
     return res.json({
       senderEmail: map.get(ADMIN_SENDER_EMAIL_CONFIG_KEY) || '',
       appPassword: map.get(ADMIN_SENDER_APP_PASSWORD_CONFIG_KEY) || '',
-      ovaLink: map.get(ADMIN_OVA_LINK_CONFIG_KEY) || DEFAULT_ADMIN_OVA_LINK
+      ovaLink: map.get(ADMIN_OVA_LINK_CONFIG_KEY) || DEFAULT_ADMIN_OVA_LINK,
+      platformLink: map.get(ADMIN_PLATFORM_LINK_CONFIG_KEY) || DEFAULT_ADMIN_PLATFORM_LINK,
+      credentialsTemplate: map.get(ADMIN_CREDENTIALS_TEMPLATE_CONFIG_KEY) || DEFAULT_CREDENTIALS_TEMPLATE
     });
   } catch {
     return res.status(500).json({ error: 'Database error' });
@@ -690,13 +744,24 @@ export async function getAdminSenderConfig(_req: Request, res: Response): Promis
 }
 
 export async function updateAdminSenderConfig(_req: Request, res: Response): Promise<Response> {
-  const { senderEmail, appPassword, ovaLink } = _req.body as { senderEmail?: string; appPassword?: string; ovaLink?: string };
+  const { senderEmail, appPassword, ovaLink, platformLink, credentialsTemplate } = _req.body as {
+    senderEmail?: string;
+    appPassword?: string;
+    ovaLink?: string;
+    platformLink?: string;
+    credentialsTemplate?: string;
+  };
   if (!senderEmail || !appPassword || !isLikelyEmail(senderEmail.trim())) {
     return res.status(400).json({ error: 'Sender email and app password are required' });
   }
   const normalizedOvaLink = String(ovaLink || '').trim() || DEFAULT_ADMIN_OVA_LINK;
+  const normalizedPlatformLink = String(platformLink || '').trim() || DEFAULT_ADMIN_PLATFORM_LINK;
+  const normalizedTemplate = String(credentialsTemplate || '').trim() || DEFAULT_CREDENTIALS_TEMPLATE;
   if (!/^https?:\/\//i.test(normalizedOvaLink)) {
     return res.status(400).json({ error: 'Valid OVA link is required' });
+  }
+  if (!/^https?:\/\//i.test(normalizedPlatformLink)) {
+    return res.status(400).json({ error: 'Valid platform link is required' });
   }
 
   const normalizedEmail = senderEmail.trim().toLowerCase();
@@ -734,6 +799,19 @@ export async function updateAdminSenderConfig(_req: Request, res: Response): Pro
        ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
       [ADMIN_OVA_LINK_CONFIG_KEY, normalizedOvaLink]
     );
+    await dbRun(
+      db,
+      `INSERT INTO app_config (key, value) VALUES (?, ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      [ADMIN_PLATFORM_LINK_CONFIG_KEY, normalizedPlatformLink]
+    );
+    await dbRun(
+      db,
+      `INSERT INTO app_config (key, value) VALUES (?, ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      [ADMIN_CREDENTIALS_TEMPLATE_CONFIG_KEY, normalizedTemplate]
+    );
+    logAction('admin.sender.update', `sender=${normalizedEmail}`);
     return res.json({ message: 'Sender credentials updated' });
   } catch {
     return res.status(500).json({ error: 'Database error' });
@@ -760,23 +838,39 @@ export async function shareTeamCredentialsByAdmin(req: Request, res: Response): 
     }
 
     const leaderEmail = team.team_leader_email?.trim();
-    const plainPassword = team.team_plain_password?.trim();
-    if (!leaderEmail || !plainPassword) {
+    if (!leaderEmail) {
       return res.status(400).json({ error: 'Team credentials are incomplete' });
     }
+    const rotatedPassword = crypto.randomBytes(10).toString('hex');
+    const rotatedHash = bcrypt.hashSync(rotatedPassword, 10);
+    await dbRun(db, 'UPDATE teams SET password = ?, team_plain_password = ? WHERE id = ?', [rotatedHash, rotatedPassword, teamId]);
 
     const configRows = await dbAll<{ key: string; value: string }>(
       db,
-      'SELECT key, value FROM app_config WHERE key IN (?, ?, ?)',
-      [ADMIN_SENDER_EMAIL_CONFIG_KEY, ADMIN_SENDER_APP_PASSWORD_CONFIG_KEY, ADMIN_OVA_LINK_CONFIG_KEY]
+      'SELECT key, value FROM app_config WHERE key IN (?, ?, ?, ?, ?)',
+      [
+        ADMIN_SENDER_EMAIL_CONFIG_KEY,
+        ADMIN_SENDER_APP_PASSWORD_CONFIG_KEY,
+        ADMIN_OVA_LINK_CONFIG_KEY,
+        ADMIN_PLATFORM_LINK_CONFIG_KEY,
+        ADMIN_CREDENTIALS_TEMPLATE_CONFIG_KEY
+      ]
     );
     const configMap = new Map(configRows.map((row) => [row.key, row.value]));
     const senderEmail = configMap.get(ADMIN_SENDER_EMAIL_CONFIG_KEY);
     const senderPassword = configMap.get(ADMIN_SENDER_APP_PASSWORD_CONFIG_KEY);
     const ovaLink = configMap.get(ADMIN_OVA_LINK_CONFIG_KEY) || DEFAULT_ADMIN_OVA_LINK;
+    const platformLink = configMap.get(ADMIN_PLATFORM_LINK_CONFIG_KEY) || DEFAULT_ADMIN_PLATFORM_LINK;
+    const template = configMap.get(ADMIN_CREDENTIALS_TEMPLATE_CONFIG_KEY) || DEFAULT_CREDENTIALS_TEMPLATE;
     if (!senderEmail || !senderPassword) {
       return res.status(400).json({ error: 'Admin sender credentials are not configured' });
     }
+    const body = fillTemplate(template, {
+      '<current_team_name_here>': team.name,
+      '<ctf_platform_link_here>': platformLink,
+      '<current_team_password>': rotatedPassword,
+      '<google_drive_ova_file_link_here>': ovaLink
+    });
 
     const transporter = nodemailer.createTransport({
       service: 'gmail',
@@ -790,29 +884,10 @@ export async function shareTeamCredentialsByAdmin(req: Request, res: Response): 
       from: senderEmail,
       to: leaderEmail,
       subject: `CTF Team Credentials - ${team.name}`,
-      text: `Hello Team ${team.name},
-
-Welcome to HIU Selection CTF 2026 !
-In order to submit flags on the CTF Platform,
-you will have to login using the following credentials :
-
-username : ${team.name}
-password : ${plainPassword}
-
-Oh and btw here is the VM as .ova file
-that you will try to get into :
-
-${ovaLink}
-
-
-Have fun, Hack the planet !
-
-I'll let you all cook now, break a leg.
-
-Sincerely,
-Admin`
+      text: body
     });
-
+    await dbRun(db, 'UPDATE teams SET creds_shared_email = ? WHERE id = ?', [leaderEmail.toLowerCase(), teamId]);
+    logAction('admin.team.share', `team=${team.name} id=${teamId} leader=${leaderEmail}`);
     return res.json({ message: 'Team credentials email sent' });
   } catch {
     return res.status(500).json({ error: 'Failed to send team credentials email' });

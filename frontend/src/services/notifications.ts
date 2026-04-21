@@ -1,6 +1,6 @@
 export type AppNotification = {
   id: string;
-  type: 'success' | 'error';
+  type: 'success' | 'error' | 'alert';
   message: string;
 };
 

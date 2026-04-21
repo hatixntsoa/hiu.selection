@@ -12,6 +12,7 @@ import authRoutes from './routes/auth.routes';
 import challengeRoutes from './routes/challenge.routes';
 import { router as flagRoutes, setIO } from './routes/flag.routes';
 import scoreboardRoutes from './routes/scoreboard.routes';
+import { logAction } from './utils/action-logger';
 
 if (!process.env.JWT_SECRET || !process.env.JWT_SECRET.trim()) {
   process.env.JWT_SECRET = 'change-me-dev-secret';
@@ -77,11 +78,6 @@ io.on('connection', (socket) => {
   if (user?.id) {
     socket.join(`team:${user.id}`);
   }
-  console.log('Client connected:', socket.id);
-
-  socket.on('disconnect', () => {
-    console.log('Client disconnected:', socket.id);
-  });
 });
 
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
@@ -95,12 +91,11 @@ const HOST = process.env.HOST || '0.0.0.0';
 getDatabase();
 
 server.listen(PORT, HOST, () => {
-  console.log(`CTF Platform backend running on http://${HOST}:${PORT}`);
-  console.log(`Database: ${getDatabasePath()}`);
+  logAction('server.start', `url=http://${HOST}:${PORT} db=${getDatabasePath()}`);
 });
 
 process.on('SIGINT', () => {
-  console.log('\nShutting down...');
+  logAction('server.stop', 'SIGINT');
   closeDatabase();
   server.close(() => {
     process.exit(0);

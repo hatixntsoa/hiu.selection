@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   addTimeToTimer,
+  exportDataBundle,
   getActivityFeed,
   getScoreboard,
   getStats,
@@ -25,5 +26,6 @@ router.post('/timer/start', authMiddleware, adminMiddleware, startTimer);
 router.post('/timer/restart', authMiddleware, adminMiddleware, restartTimer);
 router.post('/timer/add-time', authMiddleware, adminMiddleware, addTimeToTimer);
 router.post('/timer/infinite', authMiddleware, adminMiddleware, makeTimerInfinite);
+router.get('/export', authMiddleware, adminMiddleware, exportDataBundle);
 
 export default router;

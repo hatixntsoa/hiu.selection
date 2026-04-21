@@ -1,5 +1,10 @@
 import { Request, Response } from 'express';
+import fs from 'fs';
+import path from 'path';
+import archiver from 'archiver';
+import PDFDocument from 'pdfkit';
 import { getDatabase } from '../models/database';
+import { getDatabasePath } from '../models/database';
 import {
   addTimerSeconds,
   getCtfTimerState,
@@ -8,6 +13,7 @@ import {
   setFiniteDuration,
   setInfiniteTimer
 } from '../models/timer';
+import { logAction } from '../utils/action-logger';
 
 type ScoreboardTeam = {
   id: number;
@@ -15,6 +21,7 @@ type ScoreboardTeam = {
   score: number;
   created_at: string;
   team_leader_email?: string | null;
+  creds_shared_email?: string | null;
   rank?: number | null;
 };
 
@@ -27,6 +34,54 @@ type ActivityRow = {
 
 type CountRow = { total: number };
 type HighestScoreRow = { highest_score: number | null };
+type ExportScoreboardRow = { rank: number | null; name: string; score: number; scoreOverThirty: string };
+type ExportChallengeRow = { difficulty: 'easy' | 'medium' | 'hard' | null; first_blood_points: number | null };
+
+async function buildScoreboardPdfBuffer(rows: ExportScoreboardRow[]): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ margin: 40, size: 'A4' });
+    const chunks: Buffer[] = [];
+    doc.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', (err) => reject(err));
+
+    doc.fontSize(18).text('Selection HIU 2026 - CTF', { align: 'left' });
+    doc.moveDown(1);
+    doc.fillColor('#000');
+
+    const startX = 40;
+    const rankX = startX;
+    const teamX = 110;
+    const scoreX = 390;
+    const scoreThirtyX = 470;
+    let y = 120;
+
+    doc.fontSize(11).font('Helvetica-Bold');
+    doc.text('Rank', rankX, y);
+    doc.text('Team', teamX, y);
+    doc.text('Raw Points', scoreX, y);
+    doc.text('Score /30', scoreThirtyX, y);
+    y += 18;
+    doc.moveTo(startX, y).lineTo(555, y).strokeColor('#cccccc').stroke();
+    y += 8;
+
+    doc.font('Helvetica').fontSize(10).fillColor('#111');
+    rows.forEach((row) => {
+      const rank = row.rank ? String(row.rank) : '-';
+      doc.text(rank, rankX, y);
+      doc.text(row.name, teamX, y, { width: 290, ellipsis: true });
+      doc.text(String(row.score), scoreX, y);
+      doc.text(row.scoreOverThirty, scoreThirtyX, y);
+      y += 18;
+      if (y > 760) {
+        doc.addPage();
+        y = 60;
+      }
+    });
+
+    doc.end();
+  });
+}
 
 export function getScoreboard(_req: Request, res: Response): Response | void {
   const db = getDatabase();
@@ -34,6 +89,7 @@ export function getScoreboard(_req: Request, res: Response): Response | void {
   db.all<ScoreboardTeam>(
     `SELECT id, name, score, created_at
             , team_leader_email
+            , creds_shared_email
      FROM teams
      WHERE is_admin = 0
      ORDER BY
@@ -185,4 +241,85 @@ export async function makeTimerInfinite(_req: Request, res: Response): Promise<R
   } catch {
     return res.status(500).json({ error: 'Failed to set timer to infinite mode' });
   }
+}
+
+export function exportDataBundle(_req: Request, res: Response): Response | void {
+  const db = getDatabase();
+  db.all<ExportScoreboardRow>(
+    `SELECT name, score
+     FROM teams
+     WHERE is_admin = 0
+     ORDER BY
+       CASE WHEN score > 0 THEN 0 ELSE 1 END ASC,
+       score DESC,
+       LOWER(name) ASC,
+       created_at ASC`,
+    [],
+    async (err, teams) => {
+      if (err) {
+        return res.status(500).json({ error: 'Database error' });
+      }
+
+      db.all<ExportChallengeRow>('SELECT difficulty, first_blood_points FROM challenges', [], async (challengeErr, challenges) => {
+        if (challengeErr) {
+          return res.status(500).json({ error: 'Database error' });
+        }
+
+        const challengeMaxPoints = challenges.reduce((sum, challenge) => {
+          const explicit = Number(challenge.first_blood_points || 0);
+          if (explicit > 0) {
+            return sum + explicit;
+          }
+          if (challenge.difficulty === 'hard') {
+            return sum + 300;
+          }
+          if (challenge.difficulty === 'medium') {
+            return sum + 200;
+          }
+          return sum + 100;
+        }, 0);
+
+        const pointsPerThirty = challengeMaxPoints > 0 ? challengeMaxPoints / 30 : 0;
+        const rankedRows = teams.map((team, index) => ({ ...team, rank: team.score > 0 ? index + 1 : null }));
+        const rows = rankedRows.map((team) => {
+          const normalized = pointsPerThirty > 0 ? team.score / pointsPerThirty : 0;
+          const scoreOverThirty = Number.isInteger(normalized) ? String(normalized) : normalized.toFixed(2);
+          return { ...team, scoreOverThirty };
+        });
+        const now = new Date();
+        const generatedAt = now.toISOString();
+        const stamp = generatedAt.replace(/[:.]/g, '-');
+        const pdfName = `hiu-selection-result-${stamp}.pdf`;
+        const zipName = `hiu-selection-data-exported-${stamp}.zip`;
+
+        try {
+          const pdfBuffer = await buildScoreboardPdfBuffer(rows);
+          const dbPath = getDatabasePath();
+          const logPath = path.join(path.dirname(dbPath), 'ctf.log');
+
+          if (!fs.existsSync(logPath)) {
+            fs.writeFileSync(logPath, '');
+          }
+
+          res.setHeader('Content-Type', 'application/zip');
+          res.setHeader('Content-Disposition', `attachment; filename="${zipName}"`);
+
+          const archive = archiver('zip', { zlib: { level: 9 } });
+          archive.on('error', () => {
+            if (!res.headersSent) {
+              res.status(500).json({ error: 'Failed to export data' });
+            }
+          });
+          archive.pipe(res);
+          archive.append(pdfBuffer, { name: pdfName });
+          archive.file(dbPath, { name: 'ctf.db' });
+          archive.file(logPath, { name: 'ctf.log' });
+          void archive.finalize();
+          logAction('admin.data.export', `zip=${zipName}`);
+        } catch {
+          return res.status(500).json({ error: 'Failed to export data' });
+        }
+      });
+    }
+  );
 }

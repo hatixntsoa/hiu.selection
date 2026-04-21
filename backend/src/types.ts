@@ -11,6 +11,7 @@ export interface TeamRow {
   password: string;
   team_leader_email?: string | null;
   team_plain_password?: string | null;
+  creds_shared_email?: string | null;
   score: number;
   member_count: number;
   is_admin: number;

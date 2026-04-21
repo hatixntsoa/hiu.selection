@@ -180,16 +180,16 @@ function CrudNotifications(): JSX.Element {
   }, []);
 
   return (
-    <ToastContainer position="top-center" className="p-2" style={{ zIndex: 1085 }}>
+    <ToastContainer className="app-notification-container p-2" style={{ zIndex: 1085 }}>
       {items.map((item) => (
         <Toast
           key={item.id}
-          bg={item.type === 'success' ? 'success' : 'danger'}
+          className={`app-notification-toast app-notification-${item.type}`}
           autohide
           delay={3200}
           onClose={() => setItems((prev) => prev.filter((entry) => entry.id !== item.id))}
         >
-          <Toast.Body className="text-white">{localizeApiMessage(item.message)}</Toast.Body>
+          <Toast.Body>{localizeApiMessage(item.message)}</Toast.Body>
         </Toast>
       ))}
     </ToastContainer>

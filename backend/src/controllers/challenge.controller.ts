@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import sqlite3 from 'sqlite3';
 import { getDatabase } from '../models/database';
 import { ChallengeDifficulty, ChallengeRow } from '../types';
+import { logAction } from '../utils/action-logger';
 
 type FlagInput = {
   title?: string;
@@ -155,6 +156,7 @@ export function createChallenge(req: Request, res: Response): Response | void {
     if (err || !result) {
       return res.status(500).json({ error: 'Failed to create challenge' });
     }
+    logAction('challenge.create', `id=${result.id} public_id=${result.publicId}`);
     return res.status(201).json({
       message: 'Challenge created',
       challenge: {
@@ -226,6 +228,7 @@ export function updateChallenge(req: Request, res: Response): Response | void {
     if (this.changes === 0) {
       return res.status(404).json({ error: 'Challenge not found' });
     }
+    logAction('challenge.update', `id=${id}`);
     return res.json({ message: 'Challenge updated' });
   });
 }
@@ -240,6 +243,7 @@ export function deleteChallenge(req: Request, res: Response): Response | void {
     if (this.changes === 0) {
       return res.status(404).json({ error: 'Challenge not found' });
     }
+    logAction('challenge.delete', `id=${id}`);
     return res.json({ message: 'Challenge deleted' });
   });
 }
@@ -273,6 +277,7 @@ export function importFlags(req: Request, res: Response): Response | void {
         count: created.length,
         flags: created
       });
+      logAction('challenge.import', `count=${created.length}`);
       return;
     }
     const flag = normalizedFlags[index];

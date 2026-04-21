@@ -4,6 +4,7 @@ import { Server } from 'socket.io';
 import { getDatabase } from '../models/database';
 import { getCtfTimerState } from '../models/timer';
 import { ChallengeDifficulty, ChallengeRow } from '../types';
+import { logAction } from '../utils/action-logger';
 
 type SubmissionRow = {
   id: number;
@@ -88,7 +89,7 @@ export async function submitFlag(req: Request, res: Response, io?: Server): Prom
                   ? Number(challenge.second_blood_points) || 75
                   : Number(challenge.default_points) || 50;
 
-            db.run(
+                db.run(
               'INSERT INTO submissions (team_id, challenge_id, submitted_flag, is_correct, awarded_points) VALUES (?, ?, ?, 1, ?)',
               [teamId, challenge.id, flag, awardedPoints],
               function (this: sqlite3.RunResult, submissionErr: Error | null) {
@@ -98,6 +99,7 @@ export async function submitFlag(req: Request, res: Response, io?: Server): Prom
 
                 db.run('UPDATE teams SET score = score + ? WHERE id = ?', [awardedPoints, teamId]);
                 db.get<{ name: string }>('SELECT name FROM teams WHERE id = ?', [teamId], (_teamErr, team) => {
+                  logAction('flag.submit', `team=${team?.name || 'unknown'} team_id=${teamId} challenge_id=${challenge.id} points=${awardedPoints}`);
                   const activity = {
                     teamName: team?.name || 'Unknown',
                     points: awardedPoints,

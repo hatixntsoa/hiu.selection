@@ -703,6 +703,55 @@ h6,
   z-index: 1055;
 }
 
+.app-notification-container {
+  position: fixed;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+@keyframes slide-notification {
+  from {
+    opacity: 0;
+    transform: translateY(-14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.app-notification-toast {
+  border-radius: 10px;
+  border-width: 1px;
+  border-style: solid;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.14);
+  min-width: 340px;
+  animation: slide-notification 260ms ease-out;
+}
+
+.app-notification-toast .toast-body {
+  font-weight: 600;
+}
+
+.app-notification-success {
+  background: color-mix(in srgb, var(--warm-success) 14%, transparent);
+  border-color: color-mix(in srgb, var(--warm-success) 35%, transparent);
+  color: var(--warm-success);
+}
+
+.app-notification-error {
+  background: color-mix(in srgb, var(--warm-danger) 12%, transparent);
+  border-color: color-mix(in srgb, var(--warm-danger) 38%, transparent);
+  color: var(--warm-danger);
+}
+
+.app-notification-alert {
+  background: color-mix(in srgb, var(--warm-warning) 14%, transparent);
+  border-color: color-mix(in srgb, var(--warm-warning) 36%, transparent);
+  color: var(--warm-warning);
+}
+
 .live-solve-toast {
   --bs-toast-bg: color-mix(in srgb, var(--warm-success) 16%, var(--warm-surface));
   --bs-toast-color: var(--warm-text);

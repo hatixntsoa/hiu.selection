@@ -13,8 +13,36 @@ const ADMIN_PASSWORD_LENGTH = 16;
 const ADMIN_SENDER_EMAIL_CONFIG_KEY = 'admin_sender_email';
 const ADMIN_SENDER_APP_PASSWORD_CONFIG_KEY = 'admin_sender_app_password';
 const ADMIN_OVA_LINK_CONFIG_KEY = 'admin_ova_link';
+const ADMIN_PLATFORM_LINK_CONFIG_KEY = 'admin_platform_link';
+const ADMIN_CREDENTIALS_TEMPLATE_CONFIG_KEY = 'admin_credentials_template';
 const DEFAULT_ADMIN_SENDER_EMAIL = 'admin@selection.hiu';
 const DEFAULT_ADMIN_OVA_LINK = 'https://drive.google.com';
+const DEFAULT_ADMIN_PLATFORM_LINK = 'https://ctf.link';
+const DEFAULT_CREDENTIALS_TEMPLATE = `Hello Team <current_team_name_here>,
+
+Welcome to HIU Selection CTF 2026 !
+
+First, here is the CTF Platform link :
+<ctf_platform_link_here>
+
+In order to submit flags on it, you will have
+to login using the following credentials :
+
+username : <current_team_name_here>
+password : <current_team_password>
+
+Oh and btw here is the VM as .ova file
+that you will try to get into :
+
+<google_drive_ova_file_link_here>
+
+
+Have fun, Hack the planet !
+
+I'll let you all cook now, break a leg.
+
+Sincerely,
+C3LF`;
 const DEFAULT_TIMER_DURATION_SECONDS = 6 * 60 * 60;
 const DEFAULT_TEAM_COUNT = 15;
 const DEFAULT_TEAM_PASSWORD_LENGTH = 20;
@@ -107,6 +135,11 @@ function initializeDatabase(): void {
     db!.run('ALTER TABLE teams ADD COLUMN team_plain_password TEXT', (alterErr) => {
       if (alterErr && !alterErr.message.includes('duplicate column name')) {
         console.error('Error ensuring teams.team_plain_password:', alterErr);
+      }
+    });
+    db!.run('ALTER TABLE teams ADD COLUMN creds_shared_email TEXT', (alterErr) => {
+      if (alterErr && !alterErr.message.includes('duplicate column name')) {
+        console.error('Error ensuring teams.creds_shared_email:', alterErr);
       }
     });
 
@@ -445,6 +478,14 @@ function initializeDatabase(): void {
     db!.run(
       `INSERT OR IGNORE INTO app_config (key, value) VALUES (?, ?)`,
       [ADMIN_OVA_LINK_CONFIG_KEY, DEFAULT_ADMIN_OVA_LINK]
+    );
+    db!.run(
+      `INSERT OR IGNORE INTO app_config (key, value) VALUES (?, ?)`,
+      [ADMIN_PLATFORM_LINK_CONFIG_KEY, DEFAULT_ADMIN_PLATFORM_LINK]
+    );
+    db!.run(
+      `INSERT OR IGNORE INTO app_config (key, value) VALUES (?, ?)`,
+      [ADMIN_CREDENTIALS_TEMPLATE_CONFIG_KEY, DEFAULT_CREDENTIALS_TEMPLATE]
     );
 
     for (let index = 1; index <= DEFAULT_TEAM_COUNT; index += 1) {

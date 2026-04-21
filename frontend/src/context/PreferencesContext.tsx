@@ -62,6 +62,8 @@ const apiMessageMap: Record<string, TranslationKey> = {
   'Unable to authenticate sender credentials': 'apiSenderCredentialsAuthFailed',
   'Sender credentials updated': 'apiSenderCredentialsUpdated',
   'Valid OVA link is required': 'apiValidOvaLinkRequired',
+  'Valid platform link is required': 'apiValidPlatformLinkRequired',
+  'Failed to export data': 'apiExportDataFailed',
   'Member added': 'apiMemberAdded',
   'Member updated': 'apiMemberUpdated',
   'Member deleted': 'apiMemberDeleted',

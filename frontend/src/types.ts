@@ -68,6 +68,7 @@ export interface ScoreboardTeam {
   score: number;
   created_at: string;
   team_leader_email?: string | null;
+  creds_shared_email?: string | null;
   rank: number | null;
 }
 
