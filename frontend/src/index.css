@@ -898,6 +898,41 @@ h6,
   animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
+@keyframes score-border-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--warm-primary) 55%, transparent);
+  }
+  65% {
+    box-shadow: 0 0 0 8px color-mix(in srgb, var(--warm-primary) 0%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--warm-primary) 0%, transparent);
+  }
+}
+
+.rank-peg {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.2rem;
+  min-height: 1.9rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--warm-border) 80%, transparent);
+  background: color-mix(in srgb, var(--warm-primary) 7%, transparent);
+  font-weight: 700;
+}
+
+.score-pulse-peg {
+  border-color: var(--warm-primary) !important;
+  animation: score-border-pulse 1.5s ease-out;
+}
+
+.score-pulse-row {
+  border-color: var(--warm-primary) !important;
+  animation: score-border-pulse 1.5s ease-out;
+}
+
 .admin-live-scoreboard {
   padding: 0.35rem;
 }
@@ -988,6 +1023,8 @@ h6,
 }
 
 .live-score-row {
+  border: 1px solid transparent;
+  border-radius: 10px;
   display: grid;
   grid-template-columns: 95px 1fr auto;
   align-items: center;
@@ -998,6 +1035,11 @@ h6,
 
 .live-score-row:last-child {
   border-bottom: none;
+}
+
+.live-score-row.score-pulse-row {
+  border-color: var(--warm-primary);
+  background: color-mix(in srgb, var(--warm-primary) 8%, transparent);
 }
 
 .live-score-rank {

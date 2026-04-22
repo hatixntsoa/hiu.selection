@@ -35,6 +35,9 @@ function AdminPage(): JSX.Element {
   const [teamDetailsLoading, setTeamDetailsLoading] = useState(false);
   const [teamDetailsError, setTeamDetailsError] = useState('');
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [pulsingScoreboardTeamIds, setPulsingScoreboardTeamIds] = useState<Set<number>>(new Set());
+  const previousTeamScoresRef = useRef<Map<number, number>>(new Map());
+  const pulseTimeoutsRef = useRef<Map<number, number>>(new Map());
   const liveScoreboardRef = useRef<HTMLDivElement | null>(null);
   const { t, language, localizeApiMessage } = usePreferences();
   const currentSection =
@@ -275,6 +278,53 @@ function AdminPage(): JSX.Element {
     return () => document.removeEventListener('fullscreenchange', onChange);
   }, []);
 
+  useEffect(() => {
+    return () => {
+      pulseTimeoutsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
+      pulseTimeoutsRef.current.clear();
+    };
+  }, []);
+
+  useEffect(() => {
+    const nextScores = new Map<number, number>();
+    const increasedTeamIds: number[] = [];
+    teams.forEach((team) => {
+      nextScores.set(team.id, team.score);
+      const previousScore = previousTeamScoresRef.current.get(team.id);
+      if (typeof previousScore === 'number' && team.score > previousScore) {
+        increasedTeamIds.push(team.id);
+      }
+    });
+    previousTeamScoresRef.current = nextScores;
+
+    if (increasedTeamIds.length === 0) {
+      return;
+    }
+
+    increasedTeamIds.forEach((teamId) => {
+      const existingTimeout = pulseTimeoutsRef.current.get(teamId);
+      if (typeof existingTimeout === 'number') {
+        window.clearTimeout(existingTimeout);
+      }
+
+      setPulsingScoreboardTeamIds((previous) => {
+        const next = new Set(previous);
+        next.add(teamId);
+        return next;
+      });
+
+      const timeout = window.setTimeout(() => {
+        setPulsingScoreboardTeamIds((previous) => {
+          const next = new Set(previous);
+          next.delete(teamId);
+          return next;
+        });
+        pulseTimeoutsRef.current.delete(teamId);
+      }, 1500);
+      pulseTimeoutsRef.current.set(teamId, timeout);
+    });
+  }, [teams]);
+
   const toggleFullscreen = async (): Promise<void> => {
     if (!liveScoreboardRef.current) {
       return;
@@ -429,14 +479,19 @@ function AdminPage(): JSX.Element {
                   </tr>
                 </thead>
                 <tbody>
-                  {teams.map((team) => (
-                    <tr key={team.id}>
-                      <td>{rankLabel(team.rank)}</td>
-                      <td>{team.name}</td>
-                      <td>{team.score}</td>
-                      <td>{formatOverThirty(team.score)}/30</td>
-                    </tr>
-                  ))}
+                  {teams.map((team) => {
+                    const isPulsing = pulsingScoreboardTeamIds.has(team.id);
+                    return (
+                      <tr key={team.id}>
+                        <td>
+                          <span className={`rank-peg${isPulsing ? ' score-pulse-peg' : ''}`}>{rankLabel(team.rank)}</span>
+                        </td>
+                        <td>{team.name}</td>
+                        <td>{team.score}</td>
+                        <td>{formatOverThirty(team.score)}/30</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </Table>
             </Card.Body>

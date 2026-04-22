@@ -20,6 +20,7 @@ type ScoreboardTeam = {
   name: string;
   score: number;
   created_at: string;
+  last_solve_at?: string | null;
   team_leader_email?: string | null;
   creds_shared_email?: string | null;
   rank?: number | null;
@@ -105,16 +106,25 @@ export function getScoreboard(_req: Request, res: Response): Response | void {
   const db = getDatabase();
 
   db.all<ScoreboardTeam>(
-    `SELECT id, name, score, created_at
-            , team_leader_email
-            , creds_shared_email
-     FROM teams
+    `SELECT t.id, t.name, t.score, t.created_at
+            , t.team_leader_email
+            , t.creds_shared_email
+            , solves.last_solve_at
+     FROM teams t
+     LEFT JOIN (
+       SELECT team_id, MAX(submitted_at) AS last_solve_at
+       FROM submissions
+       WHERE is_correct = 1
+       GROUP BY team_id
+     ) solves ON solves.team_id = t.id
      WHERE is_admin = 0
      ORDER BY
-       CASE WHEN score > 0 THEN 0 ELSE 1 END ASC,
-       score DESC,
-       LOWER(name) ASC,
-       created_at ASC`,
+       CASE WHEN t.score > 0 THEN 0 ELSE 1 END ASC,
+       t.score DESC,
+       CASE WHEN solves.last_solve_at IS NULL THEN 1 ELSE 0 END ASC,
+       solves.last_solve_at ASC,
+       t.created_at ASC,
+       LOWER(t.name) ASC`,
     [],
     (err, teams) => {
       if (err) {
@@ -264,14 +274,22 @@ export async function makeTimerInfinite(_req: Request, res: Response): Promise<R
 export function exportDataBundle(_req: Request, res: Response): Response | void {
   const db = getDatabase();
   db.all<ExportScoreboardRow>(
-    `SELECT name, score
-     FROM teams
+    `SELECT t.name, t.score
+     FROM teams t
+     LEFT JOIN (
+       SELECT team_id, MAX(submitted_at) AS last_solve_at
+       FROM submissions
+       WHERE is_correct = 1
+       GROUP BY team_id
+     ) solves ON solves.team_id = t.id
      WHERE is_admin = 0
      ORDER BY
-       CASE WHEN score > 0 THEN 0 ELSE 1 END ASC,
-       score DESC,
-       LOWER(name) ASC,
-       created_at ASC`,
+       CASE WHEN t.score > 0 THEN 0 ELSE 1 END ASC,
+       t.score DESC,
+       CASE WHEN solves.last_solve_at IS NULL THEN 1 ELSE 0 END ASC,
+       solves.last_solve_at ASC,
+       t.created_at ASC,
+       LOWER(t.name) ASC`,
     [],
     async (err, teams) => {
       if (err) {
