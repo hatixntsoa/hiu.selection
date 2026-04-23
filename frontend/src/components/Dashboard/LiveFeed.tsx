@@ -13,6 +13,9 @@ function LiveFeed({ activity }: { activity: ActivityItem[] }): JSX.Element {
     }
     return t('difficultyEasy');
   };
+  const typeLabel = (challengeType?: string | null): string => {
+    return challengeType === 'challenge' ? t('challengeTypeChallenge') : t('challengeTypeVM');
+  };
 
   if (activity.length === 0) {
     return <p className="text-secondary text-center mb-0">{t('liveFeedNoActivity')}</p>;
@@ -27,6 +30,9 @@ function LiveFeed({ activity }: { activity: ActivityItem[] }): JSX.Element {
               <div>
                 <strong>{item.team_name || item.teamName}</strong>
                 <span className="text-secondary ms-2">({difficultyLabel(item.difficulty)})</span>
+                <Badge bg="secondary" pill className="ms-2">
+                  {typeLabel(item.challenge_type)}
+                </Badge>
               </div>
               <Badge bg="success">+{item.points} pts</Badge>
             </div>

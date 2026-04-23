@@ -27,14 +27,19 @@ export interface TeamMemberRow {
 }
 
 export type ChallengeDifficulty = 'easy' | 'medium' | 'hard';
+export type ChallengeKind = 'challenge' | 'vm';
+export type ChallengeCategory = 'crypto' | 'forensics' | 'reverse' | 'pwn' | 'osint' | 'vm';
 
 export interface ChallengeRow {
   id: number;
   public_id?: string;
   title: string;
   description: string;
+  problem_formulation?: string | null;
   flag: string;
   difficulty?: ChallengeDifficulty;
+  challenge_type?: ChallengeKind;
+  category?: ChallengeCategory;
   first_blood_points?: number;
   second_blood_points?: number;
   default_points?: number;

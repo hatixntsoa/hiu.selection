@@ -1,14 +1,17 @@
 import { ChangeEvent, DragEvent, FormEvent, useEffect, useMemo, useState } from 'react';
 import { Alert, Button, Form, Modal, Table } from 'react-bootstrap';
 import api from '../../services/api';
-import { Challenge, Difficulty } from '../../types';
+import { Challenge, ChallengeCategoryType, ChallengeType, Difficulty } from '../../types';
 import { usePreferences } from '../../context/PreferencesContext';
 
 type FlagForm = {
   title: string;
   description: string;
+  problem_formulation: string;
   flag: string;
   difficulty: Difficulty;
+  challenge_type: ChallengeType;
+  category: ChallengeCategoryType;
   first_blood_points: string;
   second_blood_points: string;
   default_points: string;
@@ -26,6 +29,22 @@ function normalizeDifficulty(value: unknown): Difficulty {
     return normalized;
   }
   return 'easy';
+}
+
+function normalizeChallengeType(value: unknown): ChallengeType {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (normalized === 'challenge' || normalized === 'vm') {
+    return normalized;
+  }
+  return 'vm';
+}
+
+function normalizeChallengeCategory(value: unknown): ChallengeCategoryType {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (normalized === 'crypto' || normalized === 'forensics' || normalized === 'reverse' || normalized === 'pwn' || normalized === 'osint' || normalized === 'vm') {
+    return normalized;
+  }
+  return 'vm';
 }
 
 function difficultyLabelKey(difficulty: Difficulty): 'difficultyEasy' | 'difficultyMedium' | 'difficultyHard' {
@@ -55,8 +74,11 @@ function FlagManager({ onFlagChange }: { onFlagChange?: () => void }): JSX.Eleme
   const [formData, setFormData] = useState<FlagForm>({
     title: '',
     description: '',
+    problem_formulation: '',
     flag: '',
     difficulty: 'easy',
+    challenge_type: 'vm',
+    category: 'vm',
     first_blood_points: '100',
     second_blood_points: '75',
     default_points: '50'
@@ -90,8 +112,11 @@ function FlagManager({ onFlagChange }: { onFlagChange?: () => void }): JSX.Eleme
       setFormData({
         title: flagItem.title || '',
         description: flagItem.description || '',
+        problem_formulation: flagItem.problem_formulation || '',
         flag: flagItem.flag || '',
         difficulty: normalizeDifficulty(flagItem.difficulty),
+        challenge_type: normalizeChallengeType(flagItem.challenge_type),
+        category: normalizeChallengeCategory(flagItem.category),
         first_blood_points: String(flagItem.first_blood_points || 100),
         second_blood_points: String(flagItem.second_blood_points || 75),
         default_points: String(flagItem.default_points || 50)
@@ -101,8 +126,11 @@ function FlagManager({ onFlagChange }: { onFlagChange?: () => void }): JSX.Eleme
       setFormData({
         title: '',
         description: '',
+        problem_formulation: '',
         flag: '',
         difficulty: 'easy',
+        challenge_type: 'vm',
+        category: 'vm',
         first_blood_points: '100',
         second_blood_points: '75',
         default_points: '50'
@@ -121,8 +149,11 @@ function FlagManager({ onFlagChange }: { onFlagChange?: () => void }): JSX.Eleme
       const payload = {
         title: formData.title.trim(),
         description: formData.description.trim(),
+        problem_formulation: formData.problem_formulation.trim(),
         flag: formData.flag.trim(),
         difficulty: formData.difficulty,
+        challenge_type: formData.challenge_type,
+        category: formData.challenge_type === 'vm' ? 'vm' : formData.category,
         first_blood_points: Number(formData.first_blood_points || 100),
         second_blood_points: Number(formData.second_blood_points || 75),
         default_points: Number(formData.default_points || 50)
@@ -212,6 +243,16 @@ function FlagManager({ onFlagChange }: { onFlagChange?: () => void }): JSX.Eleme
     e.target.value = '';
   };
 
+  const handleCopyFlag = async (flagValue: string): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(flagValue);
+      setSuccess(t('adminFlagsCopied'));
+      setError('');
+    } catch {
+      setError(t('adminFlagsCopyFailed'));
+    }
+  };
+
   return (
     <div>
       <div className="d-flex justify-content-between align-items-center mb-3">
@@ -241,6 +282,7 @@ function FlagManager({ onFlagChange }: { onFlagChange?: () => void }): JSX.Eleme
             <th>{t('managerFieldTitle')}</th>
             <th>{t('managerFieldDescription')}</th>
             <th>{t('managerTableFlag')}</th>
+            <th>{t('managerTableType')}</th>
             <th>{t('managerTableDifficulty')}</th>
             <th>{t('managerTablePoints')}</th>
             <th>{t('managerTableActions')}</th>
@@ -252,7 +294,20 @@ function FlagManager({ onFlagChange }: { onFlagChange?: () => void }): JSX.Eleme
               <td><code>{item.public_id || item.id}</code></td>
               <td>{item.title || '-'}</td>
               <td>{item.description || '-'}</td>
-               <td><code>{showFlags ? item.flag : '••••••••••••••••••••'}</code></td>
+              <td>
+                <code
+                  className={`flag-cell-code ${showFlags ? 'is-revealed' : ''}`}
+                  onClick={() => {
+                    if (showFlags && item.flag) {
+                      void handleCopyFlag(item.flag);
+                    }
+                  }}
+                  title={showFlags ? item.flag || '' : ''}
+                >
+                  {showFlags ? item.flag : '••••••••••••••••••••'}
+                </code>
+              </td>
+              <td>{item.challenge_type === 'challenge' ? t('challengeTypeChallenge') : t('challengeTypeVM')}</td>
               <td>{t(difficultyLabelKey(normalizeDifficulty(item.difficulty)))}</td>
               <td>{Math.max(Number(item.first_blood_points) || 100, Number(item.second_blood_points) || 75, Number(item.default_points) || 50)}</td>
               <td>
@@ -299,6 +354,15 @@ function FlagManager({ onFlagChange }: { onFlagChange?: () => void }): JSX.Eleme
               />
             </Form.Group>
             <Form.Group className="mb-3">
+              <Form.Label>{t('dashboardProblemFormulation')}</Form.Label>
+              <Form.Control
+                as="textarea"
+                rows={3}
+                value={formData.problem_formulation}
+                onChange={(e) => setFormData((prev) => ({ ...prev, problem_formulation: e.target.value }))}
+              />
+            </Form.Group>
+            <Form.Group className="mb-3">
               <Form.Label>{t('managerFieldFlag')}</Form.Label>
               <Form.Control
                 type="text"
@@ -306,6 +370,43 @@ function FlagManager({ onFlagChange }: { onFlagChange?: () => void }): JSX.Eleme
                 value={formData.flag}
                 onChange={(e) => setFormData((prev) => ({ ...prev, flag: e.target.value }))}
               />
+            </Form.Group>
+            <Form.Group className="mb-3">
+              <Form.Label>{t('managerFieldType')}</Form.Label>
+              <Form.Select
+                value={formData.challenge_type}
+                onChange={(e) => {
+                  const challengeType = normalizeChallengeType(e.target.value);
+                  setFormData((prev) => ({
+                    ...prev,
+                    challenge_type: challengeType,
+                    category: challengeType === 'vm' ? 'vm' : prev.category === 'vm' ? 'crypto' : prev.category
+                  }));
+                }}
+              >
+                <option value="vm">{t('challengeTypeVM')}</option>
+                <option value="challenge">{t('challengeTypeChallenge')}</option>
+              </Form.Select>
+            </Form.Group>
+            <Form.Group className="mb-3">
+              <Form.Label>{t('managerFieldCategory')}</Form.Label>
+              <Form.Select
+                value={formData.category}
+                onChange={(e) => setFormData((prev) => ({ ...prev, category: normalizeChallengeCategory(e.target.value) }))}
+                disabled={formData.challenge_type === 'vm'}
+              >
+                {formData.challenge_type === 'vm' ? (
+                  <option value="vm">{t('challengeCategoryVM')}</option>
+                ) : (
+                  <>
+                    <option value="crypto">{t('challengeCategoryCrypto')}</option>
+                    <option value="forensics">{t('challengeCategoryForensics')}</option>
+                    <option value="reverse">{t('challengeCategoryReverse')}</option>
+                    <option value="pwn">{t('challengeCategoryPwn')}</option>
+                    <option value="osint">{t('challengeCategoryOsint')}</option>
+                  </>
+                )}
+              </Form.Select>
             </Form.Group>
             <Form.Group className="mb-3">
               <Form.Label>{t('managerTableDifficulty')}</Form.Label>

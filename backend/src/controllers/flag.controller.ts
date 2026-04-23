@@ -99,6 +99,7 @@ export async function submitFlag(req: Request, res: Response, io?: Server): Prom
                     teamName: team?.name || 'Unknown',
                     points: awardedPoints,
                     difficulty: challenge.difficulty || 'easy',
+                    challenge_type: challenge.challenge_type || 'vm',
                     timestamp: new Date().toISOString()
                   };
                   io?.emit('flag_captured', activity);

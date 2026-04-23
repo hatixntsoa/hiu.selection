@@ -139,6 +139,8 @@ function Navbar(): JSX.Element {
 
   const isLockedForTeam = Boolean(user && !user.isAdmin && timer?.isExpired);
   const challengesDisabled = Boolean(timer && !timer.canSubmit);
+  const challengesTabDisabled = Boolean(timer && !timer.isActive);
+  const challengesTabDisabledReason = timer && !timer.isActive ? t('dashboardChallengesNotStarted') : undefined;
   const challengesDisabledReason =
     timer && !timer.isActive ? t('dashboardChallengesNotStarted') : challengesDisabled ? t('dashboardChallengesClosed') : undefined;
   const timerText = useMemo(() => formatTimer(timer, t), [timer, t]);
@@ -163,6 +165,16 @@ function Navbar(): JSX.Element {
                   </Nav.Link>
                   <Nav.Link as={Link} to="/dashboard/live-activity" active={location.pathname === '/dashboard/live-activity'}>
                     {t('dashboardTabLiveActivity')}
+                  </Nav.Link>
+                  <Nav.Link
+                    as={Link}
+                    to={challengesTabDisabled ? '#' : '/dashboard/challenges'}
+                    active={!challengesTabDisabled && location.pathname === '/dashboard/challenges'}
+                    disabled={challengesTabDisabled}
+                    title={challengesTabDisabledReason}
+                    className={challengesTabDisabled ? 'challenge-tab-disabled' : undefined}
+                  >
+                    {t('dashboardTabChallenges')}
                   </Nav.Link>
                   <Nav.Link
                     as={Link}
@@ -193,11 +205,11 @@ function Navbar(): JSX.Element {
                   <Nav.Link as={Link} to="/admin/scoreboard" active={location.pathname === '/admin/scoreboard'}>
                     {t('adminTabScoreboard')}
                   </Nav.Link>
-                  <Nav.Link as={Link} to="/admin/data-export" active={location.pathname === '/admin/data-export'}>
-                    {t('adminTabDataExport')}
-                  </Nav.Link>
                   <Nav.Link as={Link} to="/admin/live-scoreboard" active={location.pathname === '/admin/live-scoreboard'}>
                     {t('adminTabLiveScoreboard')}
+                  </Nav.Link>
+                  <Nav.Link as={Link} to="/admin/data-export" active={location.pathname === '/admin/data-export'}>
+                    {t('adminTabDataExport')}
                   </Nav.Link>
                 </>
               )}

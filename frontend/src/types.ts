@@ -17,6 +17,8 @@ export interface TeamMember {
 }
 
 export type Difficulty = 'easy' | 'medium' | 'hard';
+export type ChallengeType = 'challenge' | 'vm';
+export type ChallengeCategoryType = 'crypto' | 'forensics' | 'reverse' | 'pwn' | 'osint' | 'vm';
 
 export interface Challenge {
   id: number;
@@ -24,7 +26,9 @@ export interface Challenge {
   challenge_code?: string;
   title: string;
   description: string;
-  category: string;
+  problem_formulation?: string;
+  challenge_type?: ChallengeType;
+  category: ChallengeCategoryType | string;
   points: number;
   difficulty?: Difficulty;
   first_blood_points?: number;
@@ -45,6 +49,7 @@ export interface ActivityItem {
   teamName?: string;
   points: number;
   difficulty?: Difficulty | null;
+  challenge_type?: ChallengeType | null;
   submitted_at?: string;
   timestamp?: string;
 }

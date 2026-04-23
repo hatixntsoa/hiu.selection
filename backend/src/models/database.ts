@@ -203,7 +203,10 @@ function initializeDatabase(): void {
         public_id TEXT UNIQUE,
         title TEXT NOT NULL,
         description TEXT,
+        problem_formulation TEXT,
         difficulty TEXT NOT NULL DEFAULT 'easy',
+        challenge_type TEXT NOT NULL DEFAULT 'vm',
+        category TEXT NOT NULL DEFAULT 'vm',
         first_blood_points INTEGER NOT NULL DEFAULT 100,
         second_blood_points INTEGER NOT NULL DEFAULT 75,
         default_points INTEGER NOT NULL DEFAULT 50,
@@ -212,7 +215,7 @@ function initializeDatabase(): void {
       )
     `);
 
-    type DefaultChallenge = {
+    type DefaultChallengeBase = {
       title: string;
       description: string;
       flag: string;
@@ -222,7 +225,13 @@ function initializeDatabase(): void {
       third: number;
     };
 
-    const sampleChallenges: DefaultChallenge[] = [
+    type DefaultChallenge = DefaultChallengeBase & {
+      problemFormulation: string;
+      challengeType: 'challenge' | 'vm';
+      category: 'crypto' | 'forensics' | 'reverse' | 'pwn' | 'osint' | 'vm';
+    };
+
+    const vmSampleChallenges = [
       { title: 'Easy Web 01', description: 'Default easy challenge #1', flag: 'HIU_2026{easy_web_01}', difficulty: 'easy', first: EASY_FIRST_BLOOD_POINTS, second: EASY_SECOND_BLOOD_POINTS, third: EASY_THIRD_BLOOD_POINTS },
       { title: 'Easy Web 02', description: 'Default easy challenge #2', flag: 'HIU_2026{easy_web_02}', difficulty: 'easy', first: EASY_FIRST_BLOOD_POINTS, second: EASY_SECOND_BLOOD_POINTS, third: EASY_THIRD_BLOOD_POINTS },
       { title: 'Easy Crypto 01', description: 'Default easy challenge #3', flag: 'HIU_2026{easy_crypto_01}', difficulty: 'easy', first: EASY_FIRST_BLOOD_POINTS, second: EASY_SECOND_BLOOD_POINTS, third: EASY_THIRD_BLOOD_POINTS },
@@ -255,9 +264,48 @@ function initializeDatabase(): void {
       { title: 'Hard Misc 02', description: 'Default hard challenge #8', flag: 'HIU_2026{hard_misc_02}', difficulty: 'hard', first: HARD_FIRST_BLOOD_POINTS, second: HARD_SECOND_BLOOD_POINTS, third: HARD_THIRD_BLOOD_POINTS },
       { title: 'Hard SQL 01', description: 'Default hard challenge #9', flag: 'HIU_2026{hard_sql_01}', difficulty: 'hard', first: HARD_FIRST_BLOOD_POINTS, second: HARD_SECOND_BLOOD_POINTS, third: HARD_THIRD_BLOOD_POINTS },
       { title: 'Hard Forensics 01', description: 'Default hard challenge #10', flag: 'HIU_2026{hard_forensics_01}', difficulty: 'hard', first: HARD_FIRST_BLOOD_POINTS, second: HARD_SECOND_BLOOD_POINTS, third: HARD_THIRD_BLOOD_POINTS }
+    ] as DefaultChallengeBase[];
+
+    const challengeCategories: Array<DefaultChallenge['category']> = ['crypto', 'forensics', 'reverse', 'pwn', 'osint'];
+    const difficultyLevels: Array<DefaultChallengeBase['difficulty']> = ['easy', 'medium', 'hard'];
+
+    const challengeSeeds: DefaultChallenge[] = challengeCategories.flatMap((category) =>
+      difficultyLevels.map((difficulty) => {
+        const base = `${category}_${difficulty}`;
+        const points =
+          difficulty === 'hard'
+            ? { first: HARD_FIRST_BLOOD_POINTS, second: HARD_SECOND_BLOOD_POINTS, third: HARD_THIRD_BLOOD_POINTS }
+            : difficulty === 'medium'
+              ? { first: MEDIUM_FIRST_BLOOD_POINTS, second: MEDIUM_SECOND_BLOOD_POINTS, third: MEDIUM_THIRD_BLOOD_POINTS }
+              : { first: EASY_FIRST_BLOOD_POINTS, second: EASY_SECOND_BLOOD_POINTS, third: EASY_THIRD_BLOOD_POINTS };
+        const titleCategory = category === 'osint' ? 'OSINT' : category.charAt(0).toUpperCase() + category.slice(1);
+        const titleDifficulty = difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
+        return {
+          title: `${titleCategory} ${titleDifficulty}`,
+          description: `${titleCategory} challenge at ${titleDifficulty} level.`,
+          problemFormulation: `Analyze the provided ${titleCategory} artifact and submit the exact flag.`,
+          flag: `HIU_2026{challenge_${base}_01}`,
+          difficulty,
+          challengeType: 'challenge',
+          category,
+          first: points.first,
+          second: points.second,
+          third: points.third
+        };
+      })
+    );
+
+    const sampleChallenges: DefaultChallenge[] = [
+      ...vmSampleChallenges.map((challenge) => ({
+        ...challenge,
+        problemFormulation: '',
+        challengeType: 'vm' as const,
+        category: 'vm' as const
+      })),
+      ...challengeSeeds
     ];
 
-    const defaultCategories = ['Web', 'Crypto', 'Reverse', 'Misc', 'SQL', 'Forensics'];
+    const defaultCategories = ['Web', 'Crypto', 'Reverse', 'Misc', 'SQL', 'Forensics', 'Pwn', 'OSINT'];
 
     db!.all<{ name: string }>('PRAGMA table_info(challenges)', [], (challengePragmaErr, challengeColumns) => {
       if (challengePragmaErr) {
@@ -306,9 +354,34 @@ function initializeDatabase(): void {
           errorLabel: 'Error adding challenges.default_points'
         });
       }
+      const hasProblemFormulation = challengeColumns.some((column) => column.name === 'problem_formulation');
+      if (!hasProblemFormulation) {
+        migrationSteps.push({
+          sql: 'ALTER TABLE challenges ADD COLUMN problem_formulation TEXT',
+          errorLabel: 'Error adding challenges.problem_formulation'
+        });
+      }
+      const hasChallengeType = challengeColumns.some((column) => column.name === 'challenge_type');
+      if (!hasChallengeType) {
+        migrationSteps.push({
+          sql: `ALTER TABLE challenges ADD COLUMN challenge_type TEXT NOT NULL DEFAULT 'vm'`,
+          errorLabel: 'Error adding challenges.challenge_type'
+        });
+      }
+      const hasCategory = challengeColumns.some((column) => column.name === 'category');
+      if (!hasCategory) {
+        migrationSteps.push({
+          sql: `ALTER TABLE challenges ADD COLUMN category TEXT NOT NULL DEFAULT 'vm'`,
+          errorLabel: 'Error adding challenges.category'
+        });
+      }
       migrationSteps.push({
         sql: 'CREATE UNIQUE INDEX IF NOT EXISTS idx_challenges_public_id ON challenges(public_id)',
         errorLabel: 'Error creating challenges public_id index'
+      });
+      migrationSteps.push({
+        sql: 'CREATE INDEX IF NOT EXISTS idx_challenges_type ON challenges(challenge_type)',
+        errorLabel: 'Error creating challenges type index'
       });
 
       defaultCategories.forEach((category) => {
@@ -322,17 +395,20 @@ function initializeDatabase(): void {
       sampleChallenges.forEach((challenge) => {
         migrationSteps.push({
           sql: `INSERT INTO challenges (
-                  public_id, title, description, flag, difficulty, first_blood_points, second_blood_points, default_points
+                  public_id, title, description, problem_formulation, flag, difficulty, challenge_type, category, first_blood_points, second_blood_points, default_points
                 )
-                SELECT lower(hex(randomblob(3))), ?, ?, ?, ?, ?, ?, ?
+                SELECT lower(hex(randomblob(3))), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                 WHERE NOT EXISTS (
                   SELECT 1 FROM challenges WHERE LOWER(TRIM(flag)) = LOWER(TRIM(?))
                 )`,
           params: [
             challenge.title,
             challenge.description,
+            challenge.problemFormulation,
             challenge.flag,
             challenge.difficulty,
+            challenge.challengeType,
+            challenge.category,
             challenge.first,
             challenge.second,
             challenge.third,
@@ -353,6 +429,21 @@ function initializeDatabase(): void {
               SET difficulty = 'easy'
               WHERE LOWER(TRIM(COALESCE(difficulty, ''))) NOT IN ('easy', 'medium', 'hard')`,
         errorLabel: 'Error normalizing challenges.difficulty'
+      });
+      migrationSteps.push({
+        sql: `UPDATE challenges
+              SET challenge_type = 'vm'
+              WHERE LOWER(TRIM(COALESCE(challenge_type, ''))) NOT IN ('challenge', 'vm')`,
+        errorLabel: 'Error normalizing challenges.challenge_type'
+      });
+      migrationSteps.push({
+        sql: `UPDATE challenges
+              SET category = CASE
+                WHEN challenge_type = 'vm' THEN 'vm'
+                WHEN LOWER(TRIM(COALESCE(category, ''))) IN ('crypto', 'forensics', 'reverse', 'pwn', 'osint') THEN LOWER(TRIM(category))
+                ELSE 'crypto'
+              END`,
+        errorLabel: 'Error normalizing challenges.category'
       });
       migrationSteps.push({
         sql: `UPDATE challenges
