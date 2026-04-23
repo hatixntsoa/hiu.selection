@@ -150,7 +150,7 @@ function LiveScoreboard({ teams, fullscreen = false }: { teams: ScoreboardTeam[]
                       {team.rank ? `#${team.rank}` : ''}
                     </div>
                     <div className="live-score-name">{team.name}</div>
-                    <div className="live-score-points">{team.score} pts</div>
+                    <span className="live-score-points-pill">{team.score} pts</span>
                   </div>
                 ))}
               </Card.Body>

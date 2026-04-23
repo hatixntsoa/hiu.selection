@@ -96,6 +96,7 @@ function DashboardPage(): JSX.Element {
   const [scoreboard, setScoreboard] = useState<ScoreboardTeam[]>([]);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [solvedChallenges, setSolvedChallenges] = useState<Set<number>>(new Set());
+  const [solvedChallengeAwardedPoints, setSolvedChallengeAwardedPoints] = useState<Map<number, number>>(new Map());
   const [vmFlagInput, setVmFlagInput] = useState('');
   const [challengeFlagInput, setChallengeFlagInput] = useState('');
   const [timer, setTimer] = useState<CtfTimerState | null>(null);
@@ -118,12 +119,23 @@ function DashboardPage(): JSX.Element {
       setScoreboard(scoreboardRes.data.scoreboard as ScoreboardTeam[]);
       setActivity(activityRes.data.activities as ActivityItem[]);
 
-      const solved = new Set(
-        (historyRes.data.submissions as SubmissionHistoryItem[])
-          .filter((s) => s.is_correct)
-          .map((s) => s.challenge_id)
-      );
+      const solvedSubmissions = (historyRes.data.submissions as SubmissionHistoryItem[]).filter((s) => s.is_correct);
+      const solved = new Set<number>();
+      const awardedPointsByChallenge = new Map<number, number>();
+      solvedSubmissions.forEach((submission) => {
+        const challengeId = Number(submission.challenge_id);
+        if (!Number.isFinite(challengeId)) {
+          return;
+        }
+        solved.add(challengeId);
+        if (awardedPointsByChallenge.has(challengeId)) {
+          return;
+        }
+        const awardedPoints = Number(submission.awarded_points ?? submission.points ?? 0);
+        awardedPointsByChallenge.set(challengeId, awardedPoints);
+      });
       setSolvedChallenges(solved);
+      setSolvedChallengeAwardedPoints(awardedPointsByChallenge);
       setTimer(timerRes.data.timer as CtfTimerState);
     } catch (err) {
       console.error('Error fetching data:', err);
@@ -311,12 +323,15 @@ function DashboardPage(): JSX.Element {
     return 'success';
   };
 
-  const challengeCardPoints = (challenge: Challenge): number => {
-    return Math.max(
-      Number(challenge.first_blood_points) || 0,
-      Number(challenge.second_blood_points) || 0,
-      Number(challenge.default_points) || 0
-    );
+  const challengeCardPoints = (challenge: Challenge, isSolved: boolean): number => {
+    const challengeId = Number(challenge.id);
+    if (isSolved && Number.isFinite(challengeId) && solvedChallengeAwardedPoints.has(challengeId)) {
+      return solvedChallengeAwardedPoints.get(challengeId) || 0;
+    }
+    if (typeof challenge.points === 'number' && challenge.points > 0) {
+      return challenge.points;
+    }
+    return Math.max(Number(challenge.first_blood_points) || 0, Number(challenge.second_blood_points) || 0, Number(challenge.default_points) || 0);
   };
 
   const renderFormattedText = (text?: string): JSX.Element => {
@@ -453,7 +468,7 @@ function DashboardPage(): JSX.Element {
                             <Card.Title className="h5 mb-0">{challenge.title}</Card.Title>
                             <div className="d-flex flex-column align-items-end">
                               <Badge pill bg="primary">
-                                {challengeCardPoints(challenge)} {t('scoreboardPoints').toLowerCase()}
+                                {challengeCardPoints(challenge, isSolved)} {t('scoreboardPoints').toLowerCase()}
                               </Badge>
                             </div>
                           </div>
@@ -546,8 +561,13 @@ function DashboardPage(): JSX.Element {
             <Button variant="secondary" onClick={() => setShowSolveModal(false)}>
               {t('managerCancel')}
             </Button>
-            <Button variant="primary" type="submit" disabled={challengesDisabled}>
-              {t('challengeSolve')}
+            <Button
+              variant={selectedChallenge && solvedChallenges.has(selectedChallenge.id) ? 'success' : 'primary'}
+              className={selectedChallenge && solvedChallenges.has(selectedChallenge.id) ? 'challenge-solved-btn' : undefined}
+              type="submit"
+              disabled={challengesDisabled || Boolean(selectedChallenge && solvedChallenges.has(selectedChallenge.id))}
+            >
+              {selectedChallenge && solvedChallenges.has(selectedChallenge.id) ? t('challengesSolved') : t('challengeSolve')}
             </Button>
           </Modal.Footer>
         </Form>

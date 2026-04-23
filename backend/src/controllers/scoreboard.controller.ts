@@ -39,7 +39,7 @@ type HighestScoreRow = { highest_score: number | null };
 type ExportScoreboardRow = { rank: number | null; name: string; score: number; scoreOverThirty: string };
 type ExportChallengeRow = { difficulty: 'easy' | 'medium' | 'hard' | null; first_blood_points: number | null };
 
-async function buildScoreboardPdfBuffer(rows: ExportScoreboardRow[]): Promise<Buffer> {
+async function buildScoreboardPdfBuffer(rows: ExportScoreboardRow[], totalRawPoints: number): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ margin: 40, size: 'A4' });
     const chunks: Buffer[] = [];
@@ -71,7 +71,7 @@ async function buildScoreboardPdfBuffer(rows: ExportScoreboardRow[]): Promise<Bu
       doc.fillColor('#FFFFFF');
       doc.text('Rank', colX.rank + 6, y + 8, { width: rankWidth - 12, align: 'left' });
       doc.text('Team Name', colX.team + 6, y + 8, { width: teamWidth - 12, align: 'left' });
-      doc.text('Raw Points', colX.raw + 6, y + 8, { width: rawWidth - 12, align: 'left' });
+      doc.text(`Raw Points / ${totalRawPoints}`, colX.raw + 6, y + 8, { width: rawWidth - 12, align: 'left' });
       doc.text('Score /30', colX.scoreThirty + 6, y + 8, { width: scoreThirtyWidth - 12, align: 'left' });
       doc.fillColor('#111111');
       return y + headerHeight;
@@ -330,7 +330,7 @@ export function exportDataBundle(_req: Request, res: Response): Response | void 
         const zipName = `hiu-selection-data-exported-${stamp}.zip`;
 
         try {
-          const pdfBuffer = await buildScoreboardPdfBuffer(rows);
+          const pdfBuffer = await buildScoreboardPdfBuffer(rows, challengeMaxPoints);
           const dbPath = getDatabasePath();
           const logPath = path.join(path.dirname(dbPath), 'ctf.log');
 

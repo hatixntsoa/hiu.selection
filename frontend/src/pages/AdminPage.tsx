@@ -350,6 +350,7 @@ function AdminPage(): JSX.Element {
   };
 
   const maxTotalPoints = challenges.reduce((sum, challenge) => sum + getChallengeMaxPoints(challenge), 0);
+  const rawPointsHeader = `${t('adminScoreRaw')} / ${maxTotalPoints}`;
   const pointsPerThirty = maxTotalPoints > 0 ? maxTotalPoints / 30 : 0;
   const scoreOverThirty = (score: number): number => {
     if (pointsPerThirty <= 0) {
@@ -397,7 +398,7 @@ function AdminPage(): JSX.Element {
     doc.text('Selection HIU 2026 - CTF', 40, 40);
     autoTable(doc, {
       startY: 60,
-      head: [[t('adminRank'), t('adminTeamName'), t('adminScoreRaw'), t('adminScoreOverThirty')]],
+      head: [[t('adminRank'), t('adminTeamName'), rawPointsHeader, t('adminScoreOverThirty')]],
       body: rows,
       styles: { fontSize: 11, cellPadding: 6 },
       headStyles: { fillColor: [52, 73, 94] }
@@ -474,7 +475,7 @@ function AdminPage(): JSX.Element {
                   <tr>
                     <th>{t('adminRank')}</th>
                     <th>{t('adminTeamName')}</th>
-                    <th>{t('adminScoreRaw')}</th>
+                    <th>{rawPointsHeader}</th>
                     <th>{t('adminScoreOverThirty')}</th>
                   </tr>
                 </thead>

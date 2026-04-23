@@ -22,6 +22,10 @@ type FlagImportItem = {
   flag?: string;
 };
 
+type ChallengeWithSolveCountRow = ChallengeRow & {
+  solve_count: number;
+};
+
 const DIFFICULTY_POINTS: Record<ChallengeDifficulty, { first: number; second: number; third: number }> = {
   easy: { first: 100, second: 75, third: 50 },
   medium: { first: 200, second: 150, third: 100 },
@@ -140,17 +144,30 @@ export function getAllChallenges(req: Request, res: Response): Response | void {
   if (queryType) {
     params.push(queryType);
   }
-  const query = includeFlag
-    ? `SELECT id, public_id, title, description, problem_formulation, flag, difficulty, challenge_type, category, first_blood_points, second_blood_points, default_points, created_at
-        FROM challenges${whereClause} ORDER BY created_at DESC, id DESC`
-    : `SELECT id, public_id, title, description, problem_formulation, difficulty, challenge_type, category, first_blood_points, second_blood_points, default_points, created_at
-        FROM challenges${whereClause} ORDER BY created_at DESC, id DESC`;
+  const baseFields = includeFlag
+    ? 'c.id, c.public_id, c.title, c.description, c.problem_formulation, c.flag, c.difficulty, c.challenge_type, c.category, c.first_blood_points, c.second_blood_points, c.default_points, c.created_at'
+    : 'c.id, c.public_id, c.title, c.description, c.problem_formulation, c.difficulty, c.challenge_type, c.category, c.first_blood_points, c.second_blood_points, c.default_points, c.created_at';
+  const query = `SELECT ${baseFields}, COUNT(s.id) AS solve_count
+        FROM challenges c
+        LEFT JOIN submissions s ON s.challenge_id = c.id AND s.is_correct = 1${whereClause}
+        GROUP BY c.id
+        ORDER BY c.created_at DESC, c.id DESC`;
 
-  db.all<ChallengeRow>(query, params, (err, rows) => {
+  db.all<ChallengeWithSolveCountRow>(query, params, (err, rows) => {
     if (err) {
       return res.status(500).json({ error: 'Database error' });
     }
-    return res.json({ challenges: rows });
+    const challenges = rows.map((row) => {
+      const solveCount = Number(row.solve_count) || 0;
+      const points =
+        solveCount <= 0
+          ? Number(row.first_blood_points) || 100
+          : solveCount === 1
+            ? Number(row.second_blood_points) || 75
+            : Number(row.default_points) || 50;
+      return { ...row, points };
+    });
+    return res.json({ challenges });
   });
 }
 

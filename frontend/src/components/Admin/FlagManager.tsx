@@ -303,6 +303,14 @@ function FlagManager({ onFlagChange }: { onFlagChange?: () => void }): JSX.Eleme
                     }
                   }}
                   title={showFlags ? item.flag || '' : ''}
+                  role={showFlags ? 'button' : undefined}
+                  tabIndex={showFlags ? 0 : -1}
+                  onKeyDown={(event) => {
+                    if (showFlags && item.flag && (event.key === 'Enter' || event.key === ' ')) {
+                      event.preventDefault();
+                      void handleCopyFlag(item.flag);
+                    }
+                  }}
                 >
                   {showFlags ? item.flag : '••••••••••••••••••••'}
                 </code>
