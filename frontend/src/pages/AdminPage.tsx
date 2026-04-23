@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useRef, useState } from 'react';
+import { ChangeEvent, FormEvent, useEffect, useRef, useState } from 'react';
 import { Alert, Button, Card, Container, Form, InputGroup, Modal, Table } from 'react-bootstrap';
 import { useParams } from 'react-router-dom';
 import api from '../services/api';
@@ -30,6 +30,9 @@ function AdminPage(): JSX.Element {
   const [sharedTeamEmailState, setSharedTeamEmailState] = useState<Record<number, string>>({});
   const [isSendingAllCreds, setIsSendingAllCreds] = useState(false);
   const [sharingTeamIds, setSharingTeamIds] = useState<Record<number, boolean>>({});
+  const [isImportingTeams, setIsImportingTeams] = useState(false);
+  const [teamImportError, setTeamImportError] = useState('');
+  const [teamImportSuccess, setTeamImportSuccess] = useState('');
   const [showTeamDetailsModal, setShowTeamDetailsModal] = useState(false);
   const [teamDetails, setTeamDetails] = useState<AdminTeamDetails | null>(null);
   const [teamDetailsLoading, setTeamDetailsLoading] = useState(false);
@@ -39,6 +42,7 @@ function AdminPage(): JSX.Element {
   const previousTeamScoresRef = useRef<Map<number, number>>(new Map());
   const pulseTimeoutsRef = useRef<Map<number, number>>(new Map());
   const liveScoreboardRef = useRef<HTMLDivElement | null>(null);
+  const teamsImportInputRef = useRef<HTMLInputElement | null>(null);
   const { t, language, localizeApiMessage } = usePreferences();
   const currentSection =
     section === 'teams' || section === 'activity' || section === 'timer' || section === 'live-scoreboard' || section === 'scoreboard' || section === 'data-export'
@@ -236,6 +240,99 @@ function AdminPage(): JSX.Element {
       }
     } finally {
       setIsSendingAllCreds(false);
+    }
+  };
+
+  const handleOpenTeamsImport = (): void => {
+    if (isImportingTeams) {
+      return;
+    }
+    teamsImportInputRef.current?.click();
+  };
+
+  const handleImportTeamsFile = async (event: ChangeEvent<HTMLInputElement>): Promise<void> => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) {
+      return;
+    }
+    if (!file.name.toLowerCase().endsWith('.xlsx')) {
+      setTeamImportError(t('adminTeamImportInvalidFile'));
+      setTeamImportSuccess('');
+      return;
+    }
+
+    setIsImportingTeams(true);
+    setTeamImportError('');
+    setTeamImportSuccess('');
+
+    try {
+      const XLSX = await import('xlsx');
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: 'array' });
+      const firstSheetName = workbook.SheetNames[0];
+      const firstSheet = firstSheetName ? workbook.Sheets[firstSheetName] : undefined;
+      if (!firstSheet) {
+        setTeamImportError(t('adminTeamImportNoRows'));
+        return;
+      }
+
+      const rows = XLSX.utils.sheet_to_json<(string | number | null)[]>(firstSheet, { header: 1, raw: true });
+      const payloadRows = rows
+        .slice(1)
+        .map((row) => {
+          const numberValue = Number(row?.[0]);
+          const teamName = String(row?.[1] || '').trim();
+          const leaderEmail = String(row?.[2] || '').trim().toLowerCase();
+          return { numberValue, teamName, leaderEmail };
+        })
+        .filter((row) => Number.isInteger(row.numberValue) && row.numberValue > 0 && row.teamName.length > 0 && row.leaderEmail.length > 0);
+
+      if (payloadRows.length === 0) {
+        setTeamImportError(t('adminTeamImportNoRows'));
+        return;
+      }
+
+      const numberToTeam = new Map<number, ScoreboardTeam>();
+      teams.forEach((team) => {
+        const match = /^team(\d+)$/i.exec(String(team.name || '').trim());
+        if (!match) {
+          return;
+        }
+        const teamNumber = Number(match[1]);
+        if (Number.isInteger(teamNumber) && teamNumber > 0) {
+          numberToTeam.set(teamNumber, team);
+        }
+      });
+
+      let updatedCount = 0;
+      for (const row of payloadRows) {
+        const matchedTeam = numberToTeam.get(row.numberValue);
+        if (!matchedTeam) {
+          continue;
+        }
+        const editResponse = await api.get(`/auth/admin/teams/${matchedTeam.id}/edit`);
+        const currentPassword = String(editResponse.data.password || '');
+        await api.put(`/auth/admin/teams/${matchedTeam.id}`, {
+          name: row.teamName,
+          password: currentPassword,
+          teamLeaderEmail: row.leaderEmail
+        });
+        updatedCount += 1;
+      }
+
+      if (updatedCount === 0) {
+        setTeamImportError(t('adminTeamImportNoMatches'));
+        return;
+      }
+
+      await fetchData();
+      setTeamImportSuccess(t('adminTeamImportDone', { count: updatedCount }));
+    } catch (err) {
+      const error = err as { response?: { data?: { error?: string } } };
+      setTeamImportError(localizeApiMessage(error.response?.data?.error || t('adminTeamImportFailed')));
+    } finally {
+      setIsImportingTeams(false);
     }
   };
 
@@ -512,18 +609,32 @@ function AdminPage(): JSX.Element {
           <Card className="mt-3 soft-card">
             <Card.Header className="d-flex justify-content-between align-items-center gap-2">
               <h5 className="mb-0 section-title">{t('adminRegisteredTeams')}</h5>
-              <Button
-                variant={isSendingAllCreds ? 'secondary' : 'primary'}
-                size="sm"
-                onClick={() => void handleShareAllTeams()}
-                disabled={isSendingAllCreds || !allLeaderEmailsEdited}
-                className={isSendingAllCreds ? 'btn-pressed-grey' : undefined}
-                title={!allLeaderEmailsEdited ? t('adminTeamShareAllBlockedHint') : undefined}
-              >
-                {isSendingAllCreds ? t('adminTeamShareAllSending') : t('adminTeamShareAll')}
-              </Button>
+              <div className="d-flex align-items-center gap-2">
+                <input ref={teamsImportInputRef} type="file" accept=".xlsx" className="d-none" onChange={(e) => void handleImportTeamsFile(e)} />
+                <Button
+                  variant={isImportingTeams ? 'secondary' : 'outline-primary'}
+                  size="sm"
+                  onClick={handleOpenTeamsImport}
+                  disabled={isImportingTeams}
+                  className={isImportingTeams ? 'btn-pressed-grey' : undefined}
+                >
+                  {isImportingTeams ? t('adminTeamImporting') : t('adminTeamImport')}
+                </Button>
+                <Button
+                  variant={isSendingAllCreds ? 'secondary' : 'primary'}
+                  size="sm"
+                  onClick={() => void handleShareAllTeams()}
+                  disabled={isSendingAllCreds || !allLeaderEmailsEdited}
+                  className={isSendingAllCreds ? 'btn-pressed-grey' : undefined}
+                  title={!allLeaderEmailsEdited ? t('adminTeamShareAllBlockedHint') : undefined}
+                >
+                  {isSendingAllCreds ? t('adminTeamShareAllSending') : t('adminTeamShareAll')}
+                </Button>
+              </div>
             </Card.Header>
             <Card.Body>
+              {teamImportError ? <Alert variant="danger">{teamImportError}</Alert> : null}
+              {teamImportSuccess ? <Alert variant="success">{teamImportSuccess}</Alert> : null}
               <Table striped bordered hover responsive className="warm-table">
                 <thead>
                   <tr>
