@@ -293,41 +293,46 @@ function AdminPage(): JSX.Element {
         return;
       }
 
-      const numberToTeam = new Map<number, ScoreboardTeam>();
-      teams.forEach((team) => {
-        const match = /^team(\d+)$/i.exec(String(team.name || '').trim());
-        if (!match) {
-          return;
-        }
-        const teamNumber = Number(match[1]);
-        if (Number.isInteger(teamNumber) && teamNumber > 0) {
-          numberToTeam.set(teamNumber, team);
-        }
-      });
+      const generateImportPassword = (): string => {
+        const bytes = new Uint8Array(10);
+        crypto.getRandomValues(bytes);
+        return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+      };
 
-      let updatedCount = 0;
+      let importedCount = 0;
+      let firstImportError = '';
       for (const row of payloadRows) {
-        const matchedTeam = numberToTeam.get(row.numberValue);
-        if (!matchedTeam) {
-          continue;
+        try {
+          const generatedPassword = generateImportPassword();
+          const registerResponse = await api.post('/auth/register', {
+            name: row.teamName,
+            password: generatedPassword
+          });
+          const createdTeamId = Number(registerResponse.data?.team?.id);
+          if (!Number.isInteger(createdTeamId) || createdTeamId <= 0) {
+            continue;
+          }
+          await api.put(`/auth/admin/teams/${createdTeamId}`, {
+            name: row.teamName,
+            password: generatedPassword,
+            teamLeaderEmail: row.leaderEmail
+          });
+          importedCount += 1;
+        } catch (err) {
+          const error = err as { response?: { data?: { error?: string } } };
+          if (!firstImportError) {
+            firstImportError = localizeApiMessage(error.response?.data?.error || t('adminTeamImportFailed'));
+          }
         }
-        const editResponse = await api.get(`/auth/admin/teams/${matchedTeam.id}/edit`);
-        const currentPassword = String(editResponse.data.password || '');
-        await api.put(`/auth/admin/teams/${matchedTeam.id}`, {
-          name: row.teamName,
-          password: currentPassword,
-          teamLeaderEmail: row.leaderEmail
-        });
-        updatedCount += 1;
       }
 
-      if (updatedCount === 0) {
-        setTeamImportError(t('adminTeamImportNoMatches'));
+      if (importedCount === 0) {
+        setTeamImportError(firstImportError || t('adminTeamImportNoMatches'));
         return;
       }
 
       await fetchData();
-      setTeamImportSuccess(t('adminTeamImportDone', { count: updatedCount }));
+      setTeamImportSuccess(t('adminTeamImportDone', { count: importedCount }));
     } catch (err) {
       const error = err as { response?: { data?: { error?: string } } };
       setTeamImportError(localizeApiMessage(error.response?.data?.error || t('adminTeamImportFailed')));

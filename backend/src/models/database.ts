@@ -45,7 +45,6 @@ Kind regards,
 C3LF`;
 
 const DEFAULT_TIMER_DURATION_SECONDS = 5 * 60 * 60;
-const DEFAULT_TEAM_COUNT = 15;
 const DEFAULT_TEAM_PASSWORD_LENGTH = 20;
 const EASY_FIRST_BLOOD_POINTS = 100;
 const EASY_SECOND_BLOOD_POINTS = 75;
@@ -66,10 +65,6 @@ function generateSecurePassword(): string {
     password += alphabet[crypto.randomInt(alphabet.length)];
   }
   return password;
-}
-
-function toTeamEmail(teamName: string): string {
-  return `${teamName.toLowerCase()}@ctf.local`;
 }
 
 function generateHexPassword(length: number): string {
@@ -467,26 +462,6 @@ function initializeDatabase(): void {
       `INSERT OR IGNORE INTO app_config (key, value) VALUES (?, ?)`,
       [ADMIN_EMAIL_SUBJECT_CONFIG_KEY, DEFAULT_ADMIN_EMAIL_SUBJECT]
     );
-
-    for (let index = 1; index <= DEFAULT_TEAM_COUNT; index += 1) {
-      const teamName = `team${index}`;
-      const plainPassword = defaultTeamPassword();
-      const hashedPassword = bcrypt.hashSync(plainPassword, 10);
-      const leaderEmail = `${teamName.toLowerCase()}_leader@example.com`;
-      db!.run(
-        `INSERT INTO teams (name, email, password, team_plain_password, team_leader_email, score, member_count, is_admin)
-         SELECT ?, ?, ?, ?, ?, 0, 0, 0
-         WHERE NOT EXISTS (
-           SELECT 1 FROM teams WHERE name = ? COLLATE NOCASE
-         )`,
-        [teamName, toTeamEmail(teamName), hashedPassword, plainPassword, leaderEmail, teamName],
-        (seedErr) => {
-          if (seedErr) {
-            console.error('Error seeding default teams:', seedErr);
-          }
-        }
-      );
-    }
 
     const persistAndPrintAdminPassword = (password: string): void => {
       db!.run(
