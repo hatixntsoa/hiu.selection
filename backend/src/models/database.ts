@@ -44,7 +44,7 @@ Best of luck, and enjoy the challenge.
 Kind regards,
 C3LF`;
 
-const DEFAULT_TIMER_DURATION_SECONDS = 6 * 60 * 60;
+const DEFAULT_TIMER_DURATION_SECONDS = 5 * 60 * 60;
 const DEFAULT_TEAM_COUNT = 15;
 const DEFAULT_TEAM_PASSWORD_LENGTH = 20;
 const EASY_FIRST_BLOOD_POINTS = 100;
@@ -215,96 +215,6 @@ function initializeDatabase(): void {
       )
     `);
 
-    type DefaultChallengeBase = {
-      title: string;
-      description: string;
-      flag: string;
-      difficulty: 'easy' | 'medium' | 'hard';
-      first: number;
-      second: number;
-      third: number;
-    };
-
-    type DefaultChallenge = DefaultChallengeBase & {
-      problemFormulation: string;
-      challengeType: 'challenge' | 'vm';
-      category: 'crypto' | 'forensics' | 'reverse' | 'pwn' | 'osint' | 'vm';
-    };
-
-    const vmSampleChallenges = [
-      { title: 'Easy Web 01', description: 'Default easy challenge #1', flag: 'HIU_2026{easy_web_01}', difficulty: 'easy', first: EASY_FIRST_BLOOD_POINTS, second: EASY_SECOND_BLOOD_POINTS, third: EASY_THIRD_BLOOD_POINTS },
-      { title: 'Easy Web 02', description: 'Default easy challenge #2', flag: 'HIU_2026{easy_web_02}', difficulty: 'easy', first: EASY_FIRST_BLOOD_POINTS, second: EASY_SECOND_BLOOD_POINTS, third: EASY_THIRD_BLOOD_POINTS },
-      { title: 'Easy Crypto 01', description: 'Default easy challenge #3', flag: 'HIU_2026{easy_crypto_01}', difficulty: 'easy', first: EASY_FIRST_BLOOD_POINTS, second: EASY_SECOND_BLOOD_POINTS, third: EASY_THIRD_BLOOD_POINTS },
-      { title: 'Easy Crypto 02', description: 'Default easy challenge #4', flag: 'HIU_2026{easy_crypto_02}', difficulty: 'easy', first: EASY_FIRST_BLOOD_POINTS, second: EASY_SECOND_BLOOD_POINTS, third: EASY_THIRD_BLOOD_POINTS },
-      { title: 'Easy Reverse 01', description: 'Default easy challenge #5', flag: 'HIU_2026{easy_reverse_01}', difficulty: 'easy', first: EASY_FIRST_BLOOD_POINTS, second: EASY_SECOND_BLOOD_POINTS, third: EASY_THIRD_BLOOD_POINTS },
-      { title: 'Easy Reverse 02', description: 'Default easy challenge #6', flag: 'HIU_2026{easy_reverse_02}', difficulty: 'easy', first: EASY_FIRST_BLOOD_POINTS, second: EASY_SECOND_BLOOD_POINTS, third: EASY_THIRD_BLOOD_POINTS },
-      { title: 'Easy Misc 01', description: 'Default easy challenge #7', flag: 'HIU_2026{easy_misc_01}', difficulty: 'easy', first: EASY_FIRST_BLOOD_POINTS, second: EASY_SECOND_BLOOD_POINTS, third: EASY_THIRD_BLOOD_POINTS },
-      { title: 'Easy Misc 02', description: 'Default easy challenge #8', flag: 'HIU_2026{easy_misc_02}', difficulty: 'easy', first: EASY_FIRST_BLOOD_POINTS, second: EASY_SECOND_BLOOD_POINTS, third: EASY_THIRD_BLOOD_POINTS },
-      { title: 'Easy SQL 01', description: 'Default easy challenge #9', flag: 'HIU_2026{easy_sql_01}', difficulty: 'easy', first: EASY_FIRST_BLOOD_POINTS, second: EASY_SECOND_BLOOD_POINTS, third: EASY_THIRD_BLOOD_POINTS },
-      { title: 'Easy Forensics 01', description: 'Default easy challenge #10', flag: 'HIU_2026{easy_forensics_01}', difficulty: 'easy', first: EASY_FIRST_BLOOD_POINTS, second: EASY_SECOND_BLOOD_POINTS, third: EASY_THIRD_BLOOD_POINTS },
-
-      { title: 'Medium Web 01', description: 'Default medium challenge #1', flag: 'HIU_2026{medium_web_01}', difficulty: 'medium', first: MEDIUM_FIRST_BLOOD_POINTS, second: MEDIUM_SECOND_BLOOD_POINTS, third: MEDIUM_THIRD_BLOOD_POINTS },
-      { title: 'Medium Web 02', description: 'Default medium challenge #2', flag: 'HIU_2026{medium_web_02}', difficulty: 'medium', first: MEDIUM_FIRST_BLOOD_POINTS, second: MEDIUM_SECOND_BLOOD_POINTS, third: MEDIUM_THIRD_BLOOD_POINTS },
-      { title: 'Medium Crypto 01', description: 'Default medium challenge #3', flag: 'HIU_2026{medium_crypto_01}', difficulty: 'medium', first: MEDIUM_FIRST_BLOOD_POINTS, second: MEDIUM_SECOND_BLOOD_POINTS, third: MEDIUM_THIRD_BLOOD_POINTS },
-      { title: 'Medium Crypto 02', description: 'Default medium challenge #4', flag: 'HIU_2026{medium_crypto_02}', difficulty: 'medium', first: MEDIUM_FIRST_BLOOD_POINTS, second: MEDIUM_SECOND_BLOOD_POINTS, third: MEDIUM_THIRD_BLOOD_POINTS },
-      { title: 'Medium Reverse 01', description: 'Default medium challenge #5', flag: 'HIU_2026{medium_reverse_01}', difficulty: 'medium', first: MEDIUM_FIRST_BLOOD_POINTS, second: MEDIUM_SECOND_BLOOD_POINTS, third: MEDIUM_THIRD_BLOOD_POINTS },
-      { title: 'Medium Reverse 02', description: 'Default medium challenge #6', flag: 'HIU_2026{medium_reverse_02}', difficulty: 'medium', first: MEDIUM_FIRST_BLOOD_POINTS, second: MEDIUM_SECOND_BLOOD_POINTS, third: MEDIUM_THIRD_BLOOD_POINTS },
-      { title: 'Medium Misc 01', description: 'Default medium challenge #7', flag: 'HIU_2026{medium_misc_01}', difficulty: 'medium', first: MEDIUM_FIRST_BLOOD_POINTS, second: MEDIUM_SECOND_BLOOD_POINTS, third: MEDIUM_THIRD_BLOOD_POINTS },
-      { title: 'Medium Misc 02', description: 'Default medium challenge #8', flag: 'HIU_2026{medium_misc_02}', difficulty: 'medium', first: MEDIUM_FIRST_BLOOD_POINTS, second: MEDIUM_SECOND_BLOOD_POINTS, third: MEDIUM_THIRD_BLOOD_POINTS },
-      { title: 'Medium SQL 01', description: 'Default medium challenge #9', flag: 'HIU_2026{medium_sql_01}', difficulty: 'medium', first: MEDIUM_FIRST_BLOOD_POINTS, second: MEDIUM_SECOND_BLOOD_POINTS, third: MEDIUM_THIRD_BLOOD_POINTS },
-      { title: 'Medium Forensics 01', description: 'Default medium challenge #10', flag: 'HIU_2026{medium_forensics_01}', difficulty: 'medium', first: MEDIUM_FIRST_BLOOD_POINTS, second: MEDIUM_SECOND_BLOOD_POINTS, third: MEDIUM_THIRD_BLOOD_POINTS },
-
-      { title: 'Hard Web 01', description: 'Default hard challenge #1', flag: 'HIU_2026{hard_web_01}', difficulty: 'hard', first: HARD_FIRST_BLOOD_POINTS, second: HARD_SECOND_BLOOD_POINTS, third: HARD_THIRD_BLOOD_POINTS },
-      { title: 'Hard Web 02', description: 'Default hard challenge #2', flag: 'HIU_2026{hard_web_02}', difficulty: 'hard', first: HARD_FIRST_BLOOD_POINTS, second: HARD_SECOND_BLOOD_POINTS, third: HARD_THIRD_BLOOD_POINTS },
-      { title: 'Hard Crypto 01', description: 'Default hard challenge #3', flag: 'HIU_2026{hard_crypto_01}', difficulty: 'hard', first: HARD_FIRST_BLOOD_POINTS, second: HARD_SECOND_BLOOD_POINTS, third: HARD_THIRD_BLOOD_POINTS },
-      { title: 'Hard Crypto 02', description: 'Default hard challenge #4', flag: 'HIU_2026{hard_crypto_02}', difficulty: 'hard', first: HARD_FIRST_BLOOD_POINTS, second: HARD_SECOND_BLOOD_POINTS, third: HARD_THIRD_BLOOD_POINTS },
-      { title: 'Hard Reverse 01', description: 'Default hard challenge #5', flag: 'HIU_2026{hard_reverse_01}', difficulty: 'hard', first: HARD_FIRST_BLOOD_POINTS, second: HARD_SECOND_BLOOD_POINTS, third: HARD_THIRD_BLOOD_POINTS },
-      { title: 'Hard Reverse 02', description: 'Default hard challenge #6', flag: 'HIU_2026{hard_reverse_02}', difficulty: 'hard', first: HARD_FIRST_BLOOD_POINTS, second: HARD_SECOND_BLOOD_POINTS, third: HARD_THIRD_BLOOD_POINTS },
-      { title: 'Hard Misc 01', description: 'Default hard challenge #7', flag: 'HIU_2026{hard_misc_01}', difficulty: 'hard', first: HARD_FIRST_BLOOD_POINTS, second: HARD_SECOND_BLOOD_POINTS, third: HARD_THIRD_BLOOD_POINTS },
-      { title: 'Hard Misc 02', description: 'Default hard challenge #8', flag: 'HIU_2026{hard_misc_02}', difficulty: 'hard', first: HARD_FIRST_BLOOD_POINTS, second: HARD_SECOND_BLOOD_POINTS, third: HARD_THIRD_BLOOD_POINTS },
-      { title: 'Hard SQL 01', description: 'Default hard challenge #9', flag: 'HIU_2026{hard_sql_01}', difficulty: 'hard', first: HARD_FIRST_BLOOD_POINTS, second: HARD_SECOND_BLOOD_POINTS, third: HARD_THIRD_BLOOD_POINTS },
-      { title: 'Hard Forensics 01', description: 'Default hard challenge #10', flag: 'HIU_2026{hard_forensics_01}', difficulty: 'hard', first: HARD_FIRST_BLOOD_POINTS, second: HARD_SECOND_BLOOD_POINTS, third: HARD_THIRD_BLOOD_POINTS }
-    ] as DefaultChallengeBase[];
-
-    const challengeCategories: Array<DefaultChallenge['category']> = ['crypto', 'forensics', 'reverse', 'pwn', 'osint'];
-    const difficultyLevels: Array<DefaultChallengeBase['difficulty']> = ['easy', 'medium', 'hard'];
-
-    const challengeSeeds: DefaultChallenge[] = challengeCategories.flatMap((category) =>
-      difficultyLevels.map((difficulty) => {
-        const base = `${category}_${difficulty}`;
-        const points =
-          difficulty === 'hard'
-            ? { first: HARD_FIRST_BLOOD_POINTS, second: HARD_SECOND_BLOOD_POINTS, third: HARD_THIRD_BLOOD_POINTS }
-            : difficulty === 'medium'
-              ? { first: MEDIUM_FIRST_BLOOD_POINTS, second: MEDIUM_SECOND_BLOOD_POINTS, third: MEDIUM_THIRD_BLOOD_POINTS }
-              : { first: EASY_FIRST_BLOOD_POINTS, second: EASY_SECOND_BLOOD_POINTS, third: EASY_THIRD_BLOOD_POINTS };
-        const titleCategory = category === 'osint' ? 'OSINT' : category.charAt(0).toUpperCase() + category.slice(1);
-        const titleDifficulty = difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
-        return {
-          title: `${titleCategory} ${titleDifficulty}`,
-          description: `${titleCategory} challenge at ${titleDifficulty} level.`,
-          problemFormulation: `Analyze the provided ${titleCategory} artifact and submit the exact flag.`,
-          flag: `HIU_2026{challenge_${base}_01}`,
-          difficulty,
-          challengeType: 'challenge',
-          category,
-          first: points.first,
-          second: points.second,
-          third: points.third
-        };
-      })
-    );
-
-    const sampleChallenges: DefaultChallenge[] = [
-      ...vmSampleChallenges.map((challenge) => ({
-        ...challenge,
-        problemFormulation: '',
-        challengeType: 'vm' as const,
-        category: 'vm' as const
-      })),
-      ...challengeSeeds
-    ];
-
     const defaultCategories = ['Web', 'Crypto', 'Reverse', 'Misc', 'SQL', 'Forensics', 'Pwn', 'OSINT'];
 
     db!.all<{ name: string }>('PRAGMA table_info(challenges)', [], (challengePragmaErr, challengeColumns) => {
@@ -389,32 +299,6 @@ function initializeDatabase(): void {
           sql: 'INSERT OR IGNORE INTO categories (name) VALUES (?)',
           params: [category],
           errorLabel: 'Error seeding categories'
-        });
-      });
-
-      sampleChallenges.forEach((challenge) => {
-        migrationSteps.push({
-          sql: `INSERT INTO challenges (
-                  public_id, title, description, problem_formulation, flag, difficulty, challenge_type, category, first_blood_points, second_blood_points, default_points
-                )
-                SELECT lower(hex(randomblob(3))), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-                WHERE NOT EXISTS (
-                  SELECT 1 FROM challenges WHERE LOWER(TRIM(flag)) = LOWER(TRIM(?))
-                )`,
-          params: [
-            challenge.title,
-            challenge.description,
-            challenge.problemFormulation,
-            challenge.flag,
-            challenge.difficulty,
-            challenge.challengeType,
-            challenge.category,
-            challenge.first,
-            challenge.second,
-            challenge.third,
-            challenge.flag
-          ],
-          errorLabel: 'Error seeding sample flags'
         });
       });
 

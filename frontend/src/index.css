@@ -889,6 +889,42 @@ h6,
   cursor: pointer;
 }
 
+.flags-row-text-ellipsis {
+  display: inline-block;
+  width: 100%;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+
+.admin-flags-table .flags-col-title {
+  width: 170px;
+  max-width: 170px;
+}
+
+.admin-flags-table .flags-col-description {
+  width: 220px;
+  max-width: 220px;
+}
+
+.admin-flags-table .flags-col-flag {
+  width: 300px;
+  max-width: 300px;
+  min-width: 300px;
+  overflow: hidden;
+}
+
+.admin-flags-table .flags-col-actions {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.admin-flags-table {
+  table-layout: auto;
+}
+
 .challenge-solved-mark {
   width: 26px;
   height: 26px;

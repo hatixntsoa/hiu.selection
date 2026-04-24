@@ -1,8 +1,9 @@
-import { ChangeEvent, DragEvent, FormEvent, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Button, Form, Modal, Table } from 'react-bootstrap';
 import api from '../../services/api';
 import { Challenge, ChallengeCategoryType, ChallengeType, Difficulty } from '../../types';
 import { usePreferences } from '../../context/PreferencesContext';
+import { notify } from '../../services/notifications';
 
 type FlagForm = {
   title: string;
@@ -87,6 +88,7 @@ function FlagManager({ onFlagChange }: { onFlagChange?: () => void }): JSX.Eleme
   const [success, setSuccess] = useState('');
   const [isImporting, setIsImporting] = useState(false);
   const [showFlags, setShowFlags] = useState(false);
+  const xlsxImportInputRef = useRef<HTMLInputElement | null>(null);
 
   const importHint = useMemo(
     () => t('adminFlagsImportHint'),
@@ -99,7 +101,7 @@ function FlagManager({ onFlagChange }: { onFlagChange?: () => void }): JSX.Eleme
 
   const fetchFlags = async (): Promise<void> => {
     try {
-      const response = await api.get('/challenges?includeFlag=true');
+      const response = await api.get('/challenges', { params: { includeFlag: true, t: Date.now() } });
       setFlags(response.data.challenges as Challenge[]);
     } catch (err) {
       console.error('Error fetching flags:', err);
@@ -246,18 +248,114 @@ function FlagManager({ onFlagChange }: { onFlagChange?: () => void }): JSX.Eleme
   const handleCopyFlag = async (flagValue: string): Promise<void> => {
     try {
       await navigator.clipboard.writeText(flagValue);
+      notify('success', t('adminFlagsCopied'));
       setSuccess(t('adminFlagsCopied'));
       setError('');
     } catch {
+      notify('error', t('adminFlagsCopyFailed'));
       setError(t('adminFlagsCopyFailed'));
     }
+  };
+
+  const handleOpenXlsxImport = (): void => {
+    if (isImporting) {
+      return;
+    }
+    xlsxImportInputRef.current?.click();
+  };
+
+  const handleXlsxImportChange = (e: ChangeEvent<HTMLInputElement>): void => {
+    void (async () => {
+      const file = e.target.files?.[0];
+      e.target.value = '';
+      if (!file) {
+        return;
+      }
+      if (!file.name.toLowerCase().endsWith('.xlsx')) {
+        setError(t('adminFlagsImportXlsxOnly'));
+        setSuccess('');
+        return;
+      }
+
+      setIsImporting(true);
+      setError('');
+      setSuccess('');
+
+      try {
+        const XLSX = await import('xlsx');
+        const buffer = await file.arrayBuffer();
+        const workbook = XLSX.read(buffer, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+        const firstSheet = firstSheetName ? workbook.Sheets[firstSheetName] : undefined;
+        if (!firstSheet) {
+          setError(t('adminFlagsImportNoValid'));
+          return;
+        }
+
+        const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(firstSheet, { defval: '' });
+        const normalizedRows = rows
+          .map((row) => {
+            const challengeType = normalizeChallengeType(row.TYPE);
+            const difficulty = normalizeDifficulty(row.DIFFICULTY);
+            const defaults = DIFFICULTY_DEFAULT_POINTS[difficulty];
+            const category = challengeType === 'vm' ? 'vm' : normalizeChallengeCategory(row.CATEGORY || 'crypto');
+            return {
+              title: String(row.TITLE || '').trim(),
+              description: String(row.DESCRIPTION || '').trim(),
+              problem_formulation: String(row.FORMULATION || '').trim(),
+              flag: String(row.FLAG || '').trim(),
+              challenge_type: challengeType,
+              category,
+              difficulty,
+              first_blood_points: defaults.first,
+              second_blood_points: defaults.second,
+              default_points: defaults.third
+            };
+          })
+          .filter((row) => row.flag.length > 0);
+
+        if (normalizedRows.length === 0) {
+          setError(t('adminFlagsImportNoValid'));
+          return;
+        }
+
+        const existingFlagsResponse = await api.get('/challenges', { params: { includeFlag: true, t: Date.now() } });
+        const existingFlags = existingFlagsResponse.data.challenges as Challenge[];
+        for (const item of existingFlags) {
+          await api.delete(`/challenges/${item.id}`);
+        }
+        for (const payload of normalizedRows) {
+          await api.post('/challenges', payload);
+        }
+
+        setSuccess(t('adminFlagsImported', { count: normalizedRows.length }));
+        await fetchFlags();
+        onFlagChange?.();
+      } catch (err: any) {
+        setError(localizeApiMessage(err.response?.data?.error || t('adminFlagsImportFailed')));
+      } finally {
+        setIsImporting(false);
+      }
+    })();
   };
 
   return (
     <div>
       <div className="d-flex justify-content-between align-items-center mb-3">
-        <h5 className="mb-0 section-title">{t('adminFlagsTitle')}</h5>
         <div className="d-flex align-items-center gap-2">
+          <h5 className="mb-0 section-title">{t('adminFlagsTitle')}</h5>
+          <span className="badge rounded-pill text-bg-primary">{flags.length}</span>
+        </div>
+        <div className="d-flex align-items-center gap-2">
+          <input ref={xlsxImportInputRef} type="file" accept=".xlsx" className="d-none" onChange={handleXlsxImportChange} />
+          <Button
+            variant={isImporting ? 'secondary' : 'outline-primary'}
+            onClick={handleOpenXlsxImport}
+            disabled={isImporting}
+            className={isImporting ? 'btn-pressed-grey' : undefined}
+          >
+            {isImporting ? t('adminFlagsImporting') : t('adminFlagsImportXlsx')}
+          </Button>
           <Button
             variant="outline-secondary"
             onClick={() => setShowFlags((prev) => !prev)}
@@ -275,26 +373,26 @@ function FlagManager({ onFlagChange }: { onFlagChange?: () => void }): JSX.Eleme
       {error && <Alert variant="danger">{error}</Alert>}
       {success && <Alert variant="success">{success}</Alert>}
 
-      <Table striped bordered hover responsive className="warm-table">
+      <Table striped bordered hover responsive className="warm-table admin-flags-table">
         <thead>
           <tr>
             <th>{t('managerTableId')}</th>
-            <th>{t('managerFieldTitle')}</th>
-            <th>{t('managerFieldDescription')}</th>
-            <th>{t('managerTableFlag')}</th>
+            <th className="flags-col-title">{t('managerFieldTitle')}</th>
+            <th className="flags-col-description">{t('managerFieldDescription')}</th>
+            <th className="flags-col-flag">{t('managerTableFlag')}</th>
             <th>{t('managerTableType')}</th>
             <th>{t('managerTableDifficulty')}</th>
             <th>{t('managerTablePoints')}</th>
-            <th>{t('managerTableActions')}</th>
+            <th className="flags-col-actions">{t('managerTableActions')}</th>
           </tr>
         </thead>
         <tbody>
           {flags.map((item) => (
             <tr key={item.id}>
               <td><code>{item.public_id || item.id}</code></td>
-              <td>{item.title || '-'}</td>
-              <td>{item.description || '-'}</td>
-              <td>
+              <td className="flags-col-title"><span className="flags-row-text-ellipsis">{item.title || '-'}</span></td>
+              <td className="flags-col-description"><span className="flags-row-text-ellipsis">{item.description || '-'}</span></td>
+              <td className="flags-col-flag">
                 <code
                   className={`flag-cell-code ${showFlags ? 'is-revealed' : ''}`}
                   onClick={() => {
@@ -318,7 +416,7 @@ function FlagManager({ onFlagChange }: { onFlagChange?: () => void }): JSX.Eleme
               <td>{item.challenge_type === 'challenge' ? t('challengeTypeChallenge') : t('challengeTypeVM')}</td>
               <td>{t(difficultyLabelKey(normalizeDifficulty(item.difficulty)))}</td>
               <td>{Math.max(Number(item.first_blood_points) || 100, Number(item.second_blood_points) || 75, Number(item.default_points) || 50)}</td>
-              <td>
+              <td className="flags-col-actions">
                 <Button variant="success" size="sm" className="me-2" onClick={() => handleShowModal(item)}>
                   {t('managerEdit')}
                 </Button>

@@ -606,10 +606,13 @@ function AdminPage(): JSX.Element {
             </Card.Body>
           </Card>
       ) : currentSection === 'teams' ? (
-          <Card className="mt-3 soft-card">
-            <Card.Header className="d-flex justify-content-between align-items-center gap-2">
-              <h5 className="mb-0 section-title">{t('adminRegisteredTeams')}</h5>
-              <div className="d-flex align-items-center gap-2">
+            <Card className="mt-3 soft-card">
+              <Card.Header className="d-flex justify-content-between align-items-center gap-2">
+                <div className="d-flex align-items-center gap-2">
+                  <h5 className="mb-0 section-title">{t('adminRegisteredTeams')}</h5>
+                  <span className="badge rounded-pill text-bg-primary">{teams.length}</span>
+                </div>
+                <div className="d-flex align-items-center gap-2">
                 <input ref={teamsImportInputRef} type="file" accept=".xlsx" className="d-none" onChange={(e) => void handleImportTeamsFile(e)} />
                 <Button
                   variant={isImportingTeams ? 'secondary' : 'outline-primary'}
